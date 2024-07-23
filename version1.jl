@@ -176,11 +176,10 @@ function split_below(enerfrac_plugged::Float64, enerfrac_needed::Float64)
     elseif enerfrac_plugged ≥ 1.0
         return 0.0, 0.0, 1.0
     end
-    ## Use beta distribution with wide dispersion: say a + b = 3
-    alpha = enerfrac_plugged * 3 # a / (a + b) = mu
-    dist = Beta(alpha, 3. - alpha)
+    ## Use normal distribution, so I can calculate means of truncated
+    dist = truncated(Normal(enerfrac_plugged, 0.05), lower=0., upper=1.)
     portion_below = cdf(dist, enerfrac_needed)
-    portion_below, enerfrac_needed - median(truncated(dist, upper=enerfrac_needed)), median(truncated(dist, lower=enerfrac_needed))
+    portion_below, mean(truncated(dist, upper=enerfrac_needed)), mean(truncated(dist, lower=enerfrac_needed))
 end
 
 split_below(0.5, 0.5)
@@ -203,6 +202,10 @@ function simustep_alldrive(vehicles_plugged_1::Float64, vehicles_avail_1::Float6
     end
     vehicles_avail_2 = 0.
 
+    @assert !isnan(vehicles_avail_2)
+    @assert !isnan(enerfrac_avail_2)
+    @assert !isnan(enerfrac_driving_2)
+
     return vehicles_avail_2, enerfrac_avail_2, enerfrac_driving_2
 end
 
@@ -215,6 +218,10 @@ function simustep_allplug(vehicles_plugged_1::Float64, vehicles_avail_1::Float64
     end
     enerfrac_driving_2 = enerfrac_driving_1
     vehicles_avail_2 = vehicles_avail_1 + vehicles - vehicles_plugged_1
+
+    @assert !isnan(vehicles_avail_2)
+    @assert !isnan(enerfrac_avail_2)
+    @assert !isnan(enerfrac_driving_2)
 
     return vehicles_avail_2, enerfrac_avail_2, enerfrac_driving_2
 end
@@ -231,6 +238,10 @@ function simustep_event(vehicles_needed::Float64, vehicles_plugged_1::Float64, v
         enerfrac_driving_2 = enerfrac_avail_1
     end
 
+    @assert !isnan(vehicles_avail_2)
+    @assert !isnan(enerfrac_avail_2)
+    @assert !isnan(enerfrac_driving_2)
+
     return vehicles_avail_2, enerfrac_avail_2, enerfrac_driving_2
 end
 
@@ -245,6 +256,10 @@ function simustep_base(vehicles_plugged_1::Float64, vehicles_avail_1::Float64, e
         enerfrac_driving_2 = enerfrac_driving_1
     end
     vehicles_avail_2 = vehicles_avail_1
+
+    @assert !isnan(vehicles_avail_2)
+    @assert !isnan(enerfrac_avail_2)
+    @assert !isnan(enerfrac_driving_2)
 
     return vehicles_avail_2, enerfrac_avail_2, enerfrac_driving_2
 end
@@ -292,8 +307,16 @@ get_simustep_deterministic(DateTime("2024-07-15T08:34:56"))(4., 4., 1., 0.)
 get_simustep_deterministic(DateTime("2024-07-15T09:34:56"))(0., 0., 1., 1.)
 get_simustep_deterministic(DateTime("2024-07-15T17:34:56"))(0., 0., 1., .9)
 
-function adjust_below(tup::Tuple{Float64, Float64, Float64}, vehicles_below::Float64)
-    (tup[1] + vehicles_below, tup[2], tup[3])
+function adjust_below(tup::Tuple{Float64, Float64, Float64}, enerfrac_below::Float64, vehicles_below::Float64)
+    vehicles_plugged = tup[1] + vehicles_below
+    @assert vehicles_plugged ≤ vehicles + 1e-8
+
+    if vehicles_plugged > 0
+        enerfrac_plugged = (enerfrac_below * vehicles_below + tup[2] * tup[1]) / vehicles_plugged
+    else
+        enerfrac_plugged = tup[2]
+    end
+    (vehicles_plugged, enerfrac_plugged, tup[3])
 end
 
 function asstate_float(tup::Tuple{Float64, Float64, Float64})
@@ -355,7 +378,7 @@ function optimize(dt0::DateTime, SS::Int)
         enerfrac_needed = enerfrac_scheduled(dt1)
         vehicle_split = split_below.(enerfrac_range, enerfrac_needed)
         portion_below = repeat(reshape([vehicle_split[ff][1] for ff=1:FF], 1, 1, FF), PP, EE, 1, FF);
-        enerfrac_toadd_below = repeat(reshape([vehicle_split[ff][2] for ff=1:FF], 1, 1, FF), PP, EE, 1, FF);
+        enerfrac_toadd_below = repeat(reshape([enerfrac_needed - vehicle_split[ff][2] for ff=1:FF], 1, 1, FF), PP, EE, 1, FF);
         enerfrac0_byaction = repeat(reshape([vehicle_split[ff][3] for ff=1:FF], 1, 1, FF), PP, EE, 1, FF);
 
         enerfrac1_byaction = enerfrac0_byaction .+ denerfrac;
@@ -368,7 +391,7 @@ function optimize(dt0::DateTime, SS::Int)
         for mc in 1:mcdraws
             simustep = get_simustep_stochastic(dt1)
             # Note: We impose costs from enerfrac-below vehicles, but do not adjust state because it pushes up plugged-in enerfrac every period
-            statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff1][1]), enerfrac1_byaction[pp, ee, ff1, ff2], enerfrac_range[ff2]), vehicles_plugged_range[ee] * vehicle_split[ff1][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+            statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff1][1]), enerfrac1_byaction[pp, ee, ff1, ff2], enerfrac_range[ff2]), vehicle_split[ff1][2], vehicles_plugged_range[ee] * vehicle_split[ff1][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
             state2 = asstate_float.(statevar2);
             state2base = basestate.(state2);
@@ -423,21 +446,24 @@ function simu_inactive(dt0::DateTime, SS::Int, vehicles_plugged_1::Float64, ener
     enerfrac_needed = enerfrac_scheduled(dt0 + periodstep(1))
     vehicle_split = split_below(enerfrac_plugged_1, enerfrac_needed)
 
-    push!(rows, (dt0 + periodstep(1), enerfrac_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], enerfrac_driving_1))
+    push!(rows, (dt0 + periodstep(1), enerfrac_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], enerfrac_plugged_1, enerfrac_driving_1))
+
     for tt in 1:(SS-1)
         println(tt)
         enerfrac_needed = enerfrac_scheduled(dt0 + periodstep(tt))
         vehicle_split = split_below(enerfrac_plugged_1, enerfrac_needed)
 
         simustep = get_simustep_deterministic(dt0 + periodstep(tt))
-        vehicles_plugged_2, enerfrac_plugged_2, enerfrac_driving_2 = adjust_below(simustep(vehicles_plugged_1, vehicles_plugged_1 * (1. - vehicle_split[1]), vehicle_split[3], enerfrac_driving_1), vehicles_plugged_1 * vehicle_split[1])
-        push!(rows, (dt0 + periodstep(tt + 1), enerfrac_needed, vehicles_plugged_2, vehicle_split[1], vehicle_split[2], vehicle_split[3], enerfrac_driving_2))
+        vehicles_plugged_2, enerfrac_plugged_2, enerfrac_driving_2 = adjust_below(simustep(vehicles_plugged_1, vehicles_plugged_1 * (1. - vehicle_split[1]), vehicle_split[3], enerfrac_driving_1), vehicle_split[2], vehicles_plugged_1 * vehicle_split[1])
+        push!(rows, (dt0 + periodstep(tt + 1), enerfrac_needed, vehicles_plugged_2, vehicle_split[1], vehicle_split[2], enerfrac_plugged_2, enerfrac_driving_2))
         vehicles_plugged_1, enerfrac_plugged_1, enerfrac_driving_1 = vehicles_plugged_2, enerfrac_plugged_2, enerfrac_driving_2
     end
 
     df = DataFrame(rows)
-    rename!(df, [:datetime, :enerfrac_needed, :vehicles_plugged, :portion_below, :enerfrac_toadd_below, :enerfrac_avail, :enerfrac_driving])
+    rename!(df, [:datetime, :enerfrac_needed, :vehicles_plugged, :portion_below, :enerfrac_below, :enerfrac_plugged, :enerfrac_driving])
 end
+
+## XXX: Why does this jump up?
 
 vehicles_plugged_1 = 4.
 enerfrac_plugged_1 = 0.5
@@ -450,23 +476,30 @@ pp = plot(df.datetime, (df.enerfrac_plugged .* df.vehicles_plugged + df.enerfrac
 Plot a strategy over time.
 """
 function simu_strat(dt0::DateTime, strat::AbstractArray{Int}, vehicles_plugged_1::Float64, enerfrac_plugged_1::Float64, enerfrac_driving_1::Float64)
-    rows = Tuple{DateTime, Float64, Float64, Float64, Union{Missing, Float64}, Union{Missing, Tuple{Int, Int, Int}}}[]
-    push!(rows, (dt0, vehicles_plugged_1, enerfrac_plugged_1, enerfrac_driving_1, missing, missing))
+    rows = Tuple{DateTime, Float64, Float64, Float64, Float64, Float64, Float64, Union{Missing, Float64}, Union{Missing, Tuple{Int, Int, Int}}}[]
+
+    enerfrac_needed = enerfrac_scheduled(dt0 + periodstep(1))
+    vehicle_split = split_below(enerfrac_plugged_1, enerfrac_needed)
+
+    push!(rows, (dt0, enerfrac_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], enerfrac_plugged_1, enerfrac_driving_1, missing, missing))
 
     for tt in 1:(size(strat)[1]-1)
+        enerfrac_needed = enerfrac_scheduled(dt0 + periodstep(tt))
+        vehicle_split = split_below(enerfrac_plugged_1, enerfrac_needed)
+
         denerfrac = make_actions(enerfrac_plugged_1)
 
         index = asstate_round((vehicles_plugged_1, enerfrac_plugged_1, enerfrac_driving_1))
         pp = strat[tt, index...]
 
-        simustep = get_simustep(dt0 + periodstep(tt))
-        vehicles_plugged_2, enerfrac_plugged_2, enerfrac_driving_2 = simustep(vehicles_plugged_1, vehicles_plugged_1, enerfrac_plugged_1 + denerfrac[pp], enerfrac_driving_1)
-        push!(rows, (dt0 + periodstep(tt), vehicles_plugged_2, enerfrac_plugged_2, enerfrac_driving_2, denerfrac[pp], index))
+        simustep = get_simustep_stochastic(dt0 + periodstep(tt))
+        vehicles_plugged_2, enerfrac_plugged_2, enerfrac_driving_2 = adjust_below(simustep(vehicles_plugged_1, vehicles_plugged_1 * (1. - vehicle_split[1]), vehicle_split[3] + denerfrac[pp], enerfrac_driving_1), vehicle_split[2], vehicles_plugged_1 * vehicle_split[1])
+        push!(rows, (dt0 + periodstep(tt), enerfrac_needed, vehicles_plugged_2, vehicle_split[1], vehicle_split[2], enerfrac_plugged_2, enerfrac_driving_2, denerfrac[pp], index))
         vehicles_plugged_1, enerfrac_plugged_1, enerfrac_driving_1 = vehicles_plugged_2, enerfrac_plugged_2, enerfrac_driving_2
     end
 
     df = DataFrame(rows)
-    rename!(df, [:datetime, :vehicles_plugged, :enerfrac_plugged, :enerfrac_driving, :denerfrac, :state])
+    rename!(df, [:datetime, :enerfrac_needed, :vehicles_plugged, :portion_below, :enerfrac_toadd_below, :enerfrac_plugged, :enerfrac_driving, :denerfrac, :state])
 end
 
 vehicles_plugged_1 = 4.
