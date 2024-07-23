@@ -1,7 +1,9 @@
 using Dates, DataFrames
 using StatsBase, Random, Distributions
+using Roots
 using Plots
 using HolidayCalendars, RDates
+using ArgCheck
 
 # Assume this is the day before, and we can observe current storage
 # If there are any cars that need recharging to 30% level, handle that outside this system
@@ -9,16 +11,19 @@ using HolidayCalendars, RDates
 ## Order of events:
 ## In state1 at start of timestep
 ## Apply action throughout timestep
+## Look at below-split and calculate value
 ## Transition to state2 at end of timestep
 
+include("utils.jl")
 include("customer.jl")
+include("simulate.jl")
 
 # General configuration
 
 timestep = 1. # 1 hour
 SS = 36 # project for 1.5 days
 # Noon to following midnight
-mcdraws = 20
+mcdraws = 1 # 1 for deterministic
 
 hourly_valuee = .1
 
@@ -36,7 +41,6 @@ efficiency = 0.95 # EFF
 EE = 5 # 0 - 4 cars
 FF = 11 # For both enerfrac_plugged and enerfrac_driving, 0 - 1
 
-
 energy_min = 0.
 energy_max = vehicle_capacity * vehicles
 
@@ -49,10 +53,11 @@ prob_delayed_return = 0.1
 enerfrac_min = 0.3
 enerfrac_max = 1.0
 
+## Checks on configuration parameters
+
+@argcheck mcdraws > 0
+
 ## Additional calculations
-function periodstep(steps::Int)
-    Hour(round(Int, timestep * steps)) + Minute((timestep * steps - round(Int, timestep * steps)) * 60)
-end
 
 function is_peak(hourstart::DateTime)
     # Define the start and end times for on-peak hours
@@ -177,7 +182,10 @@ function split_below(enerfrac_plugged::Float64, enerfrac_needed::Float64)
         return 0.0, 0.0, 1.0
     end
     ## Use normal distribution, so I can calculate means of truncated
-    dist = truncated(Normal(enerfrac_plugged, 0.05), lower=0., upper=1.)
+    # Need to get a truncated normal with the desired mean
+    f(mu) = mean(truncated(Normal(mu, 0.05), lower=0., upper=1.)) - enerfrac_plugged
+    mu = find_zero(f, (0., 1.))
+    dist = truncated(Normal(mu, 0.05), lower=0., upper=1.)
     portion_below = cdf(dist, enerfrac_needed)
     portion_below, mean(truncated(dist, upper=enerfrac_needed)), mean(truncated(dist, lower=enerfrac_needed))
 end
@@ -188,124 +196,6 @@ split_below(0.7, 0.3)
 split_below(0.3, 0.3)
 split_below(0.1, 0.3)
 
-"""
-Adjust state to reflect the end of the period starting at dt1.
-"""
-function simustep_alldrive(vehicles_plugged_1::Float64, vehicles_avail_1::Float64, enerfrac_avail_1::Float64, enerfrac_driving_1::Float64)
-    ## Move all cars to driving mode
-    enerfrac_avail_2 = enerfrac_avail_1
-    if vehicles_plugged_1 < vehicles && vehicles - vehicles_plugged_1 + vehicles_avail_1 > 0
-        enerfrac_driving_afterdrive = (enerfrac_driving_1 * (vehicles - vehicles_plugged_1) * vehicle_capacity - driving_energy_perhour * timestep) / ((vehicles - vehicles_plugged_1) * vehicle_capacity)
-        enerfrac_driving_2 = (enerfrac_driving_afterdrive * (vehicles - vehicles_plugged_1) + enerfrac_avail_1 * vehicles_avail_1) / (vehicles - vehicles_plugged_1 + vehicles_avail_1)
-    else
-        enerfrac_driving_2 = enerfrac_avail_1
-    end
-    vehicles_avail_2 = 0.
-
-    @assert !isnan(vehicles_avail_2)
-    @assert !isnan(enerfrac_avail_2)
-    @assert !isnan(enerfrac_driving_2)
-
-    return vehicles_avail_2, enerfrac_avail_2, enerfrac_driving_2
-end
-
-function simustep_allplug(vehicles_plugged_1::Float64, vehicles_avail_1::Float64, enerfrac_avail_1::Float64, enerfrac_driving_1::Float64)
-    ## Move all cars to plugged in
-    if vehicles_avail_1 + vehicles - vehicles_plugged_1 > 0
-        enerfrac_avail_2 = (enerfrac_avail_1 * vehicles_avail_1 + enerfrac_driving_1 * (vehicles - vehicles_plugged_1)) / (vehicles_avail_1 + vehicles - vehicles_plugged_1)
-    else
-        enerfrac_avail_2 = enerfrac_avail_1
-    end
-    enerfrac_driving_2 = enerfrac_driving_1
-    vehicles_avail_2 = vehicles_avail_1 + vehicles - vehicles_plugged_1
-
-    @assert !isnan(vehicles_avail_2)
-    @assert !isnan(enerfrac_avail_2)
-    @assert !isnan(enerfrac_driving_2)
-
-    return vehicles_avail_2, enerfrac_avail_2, enerfrac_driving_2
-end
-
-function simustep_event(vehicles_needed::Float64, vehicles_plugged_1::Float64, vehicles_avail_1::Float64, enerfrac_avail_1::Float64, enerfrac_driving_1::Float64)
-    ## Move vehicles_needed cars to driving mode
-    vehicles_sent = min(vehicles_avail_1, vehicles_needed)
-    vehicles_avail_2 = vehicles_avail_1 - vehicles_sent
-    enerfrac_avail_2 = enerfrac_avail_1
-    if vehicles_plugged_1 < vehicles && vehicles - vehicles_plugged_1 + vehicles_sent > 0
-        enerfrac_driving_afterdrive = (enerfrac_driving_1 * (vehicles - vehicles_plugged_1) * vehicle_capacity - driving_energy_perhour * timestep) / ((vehicles - vehicles_plugged_1) * vehicle_capacity)
-        enerfrac_driving_2 = (enerfrac_driving_afterdrive * (vehicles - vehicles_plugged_1) + enerfrac_avail_1 * vehicles_sent) / (vehicles - vehicles_plugged_1 + vehicles_sent)
-    else
-        enerfrac_driving_2 = enerfrac_avail_1
-    end
-
-    @assert !isnan(vehicles_avail_2)
-    @assert !isnan(enerfrac_avail_2)
-    @assert !isnan(enerfrac_driving_2)
-
-    return vehicles_avail_2, enerfrac_avail_2, enerfrac_driving_2
-end
-
-function simustep_base(vehicles_plugged_1::Float64, vehicles_avail_1::Float64, enerfrac_avail_1::Float64, enerfrac_driving_1::Float64)
-    enerfrac_avail_2 = enerfrac_avail_1
-    if vehicles_plugged_1 < vehicles
-        enerfrac_driving_2 = (enerfrac_driving_1 * (vehicles - vehicles_plugged_1) * vehicle_capacity - driving_energy_perhour * timestep) / ((vehicles - vehicles_plugged_1) * vehicle_capacity)
-        if enerfrac_driving_2 < 0
-            enerfrac_driving_2 = 0.
-        end
-    else
-        enerfrac_driving_2 = enerfrac_driving_1
-    end
-    vehicles_avail_2 = vehicles_avail_1
-
-    @assert !isnan(vehicles_avail_2)
-    @assert !isnan(enerfrac_avail_2)
-    @assert !isnan(enerfrac_driving_2)
-
-    return vehicles_avail_2, enerfrac_avail_2, enerfrac_driving_2
-end
-
-function get_simustep_deterministic(dt1::DateTime)
-    date_part = Dates.Date(dt1)
-    dt_9am = DateTime(date_part, Dates.Time(9, 0, 0))
-    dt_5pm = DateTime(date_part, Dates.Time(17, 0, 0))
-
-    if dt_9am - periodstep(1) ≤ dt1 < dt_9am
-        return simustep_alldrive
-    elseif dt_5pm - periodstep(1) ≤ dt1 < dt_5pm
-        return simustep_allplug
-    else
-        return simustep_base
-    end
-end
-
-function get_simustep_stochastic(dt1::DateTime)
-    date_part = Dates.Date(dt1)
-    dt_9am = DateTime(date_part, Dates.Time(9, 0, 0))
-    dt_5pm = DateTime(date_part, Dates.Time(17, 0, 0))
-
-    if dt_5pm - periodstep(1) ≤ dt1 < dt_5pm && rand() < prob_delayed_return
-        return simustep_base
-    end
-    if rand() < prob_event_return
-        if dt_9am - periodstep(1) ≤ dt1 < dt_5pm - periodstep(1)
-            return simustep_alldrive
-        else
-            return simustep_allplug
-        end
-    end
-    if rand() < prob_event
-        vehicles_needed = sample(1:vehicles, Weights(prob_event_vehicles))
-        return (vehicles_plugged_1::Float64, vehicles_avail_1::Float64, enerfrac_avail_1::Float64, enerfrac_driving_1::Float64) -> simustep_event(vehicles_needed, vehicles_plugged_1, vehicles_avail_1, enerfrac_avail_1, enerfrac_driving_1)
-    end
-
-    return get_simustep_deterministic(dt1)
-end
-
-## Test simustep
-get_simustep_deterministic(DateTime("2024-07-15T07:34:56"))(4., 4., 1., 0.)
-get_simustep_deterministic(DateTime("2024-07-15T08:34:56"))(4., 4., 1., 0.)
-get_simustep_deterministic(DateTime("2024-07-15T09:34:56"))(0., 0., 1., 1.)
-get_simustep_deterministic(DateTime("2024-07-15T17:34:56"))(0., 0., 1., .9)
 
 function adjust_below(tup::Tuple{Float64, Float64, Float64}, enerfrac_below::Float64, vehicles_below::Float64)
     vehicles_plugged = tup[1] + vehicles_below
@@ -370,9 +260,9 @@ function optimize(dt0::DateTime, SS::Int)
     for tt in (SS-1):-1:1
         println(tt)
 
-        # if dt0 + periodstep(tt) < DateTime(Dates.Date(dt0 + periodstep(tt)), Dates.Time(9, 0, 0))
-        #     break
-        # end
+        if dt0 + periodstep(tt) < DateTime(Dates.Date(dt0 + periodstep(tt)), Dates.Time(9, 0, 0))
+            break
+        end
 
         dt1 = dt0 + periodstep(tt)
         enerfrac_needed = enerfrac_scheduled(dt1)
@@ -389,7 +279,11 @@ function optimize(dt0::DateTime, SS::Int)
         VV1byactsummc = zeros(Int64, PP, EE, FF, FF);
 
         for mc in 1:mcdraws
-            simustep = get_simustep_stochastic(dt1)
+            if mcdraws == 1
+                simustep = get_simustep_deterministic(dt1)
+            else
+                simustep = get_simustep_stochastic(dt1)
+            end
             # Note: We impose costs from enerfrac-below vehicles, but do not adjust state because it pushes up plugged-in enerfrac every period
             statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff1][1]), enerfrac1_byaction[pp, ee, ff1, ff2], enerfrac_range[ff2]), vehicle_split[ff1][2], vehicles_plugged_range[ee] * vehicle_split[ff1][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
@@ -463,8 +357,6 @@ function simu_inactive(dt0::DateTime, SS::Int, vehicles_plugged_1::Float64, ener
     rename!(df, [:datetime, :enerfrac_needed, :vehicles_plugged, :portion_below, :enerfrac_below, :enerfrac_plugged, :enerfrac_driving])
 end
 
-## XXX: Why does this jump up?
-
 vehicles_plugged_1 = 4.
 enerfrac_plugged_1 = 0.5
 enerfrac_driving_1 = 0.5
@@ -484,6 +376,9 @@ function simu_strat(dt0::DateTime, strat::AbstractArray{Int}, vehicles_plugged_1
     push!(rows, (dt0, enerfrac_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], enerfrac_plugged_1, enerfrac_driving_1, missing, missing))
 
     for tt in 1:(size(strat)[1]-1)
+        if tt == 20
+            break
+        end
         enerfrac_needed = enerfrac_scheduled(dt0 + periodstep(tt))
         vehicle_split = split_below(enerfrac_plugged_1, enerfrac_needed)
 
@@ -492,7 +387,11 @@ function simu_strat(dt0::DateTime, strat::AbstractArray{Int}, vehicles_plugged_1
         index = asstate_round((vehicles_plugged_1, enerfrac_plugged_1, enerfrac_driving_1))
         pp = strat[tt, index...]
 
-        simustep = get_simustep_stochastic(dt0 + periodstep(tt))
+        if mcdraws == 1
+            simustep = get_simustep_deterministic(dt0 + periodstep(tt))
+        else
+            simustep = get_simustep_stochastic(dt0 + periodstep(tt))
+        end
         vehicles_plugged_2, enerfrac_plugged_2, enerfrac_driving_2 = adjust_below(simustep(vehicles_plugged_1, vehicles_plugged_1 * (1. - vehicle_split[1]), vehicle_split[3] + denerfrac[pp], enerfrac_driving_1), vehicle_split[2], vehicles_plugged_1 * vehicle_split[1])
         push!(rows, (dt0 + periodstep(tt), enerfrac_needed, vehicles_plugged_2, vehicle_split[1], vehicle_split[2], enerfrac_plugged_2, enerfrac_driving_2, denerfrac[pp], index))
         vehicles_plugged_1, enerfrac_plugged_1, enerfrac_driving_1 = vehicles_plugged_2, enerfrac_plugged_2, enerfrac_driving_2
@@ -510,9 +409,9 @@ for enerfrac_plugged_1 in range(enerfrac_min, enerfrac_max, FF-1)
     df = simu_strat(dt0, strat, vehicles_plugged_1, enerfrac_plugged_1, enerfrac_driving_1)
 
     if pp == nothing
-        pp = plot(df.datetime, (df.enerfrac_plugged .* df.vehicles_plugged + df.enerfrac_driving .* (vehicles .- df.vehicles_plugged)) / vehicles, seriestype=:line, label=enerfrac_plugged_1)
+        pp = plot(df.datetime, (df.enerfrac_plugged .* df.vehicles_plugged + df.enerfrac_driving .* (vehicles .- df.vehicles_plugged)) / vehicles, seriestype=:line, label=enerfrac_plugged_1, legend=false)
     else
-        plot!(pp, df.datetime, (df.enerfrac_plugged .* df.vehicles_plugged + df.enerfrac_driving .* (vehicles .- df.vehicles_plugged)) / vehicles, seriestype=:line, label=enerfrac_plugged_1)
+        plot!(pp, df.datetime, (df.enerfrac_plugged .* df.vehicles_plugged + df.enerfrac_driving .* (vehicles .- df.vehicles_plugged)) / vehicles, seriestype=:line, label=enerfrac_plugged_1, legend=false)
     end
 end
 
