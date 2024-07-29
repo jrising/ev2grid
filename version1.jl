@@ -78,9 +78,10 @@ Returns:
  - enerfrac for high-power portion
 """
 function split_below(enerfrac_plugged::Float64, enerfrac_needed::Float64)
-    if enerfrac_plugged ≤ 0.0
+    # Limits come from truncated(Normal(mu, 0.05), lower=0., upper=1.)
+    if enerfrac_plugged ≤ 0.03989422804014327
         return 1.0, 0.0, enerfrac_needed
-    elseif enerfrac_plugged ≥ 1.0
+    elseif enerfrac_plugged ≥ 0.9601057719598567
         return 0.0, enerfrac_needed, 1.0
     end
     ## Use normal distribution, so I can calculate means of truncated

@@ -1,4 +1,4 @@
-setwd("~/research/ev2grid")
+setwd("~/research/ev2grid/ev2grid")
 
 library(dplyr)
 library(lubridate)
@@ -6,15 +6,23 @@ library(ggplot2)
 library(lfe)
 library(timeDate)
 library(FNN)
+library(reshape2)
 source("~/projects/research-common/R/felm-tools.R")
 
-year.min <- 2019
+year.min <- 2018
 year.max <- 2024
 
 df <- data.frame()
 for (year in year.min:(year.max-1))
     df <- rbind(df, read.csv(paste0("prices-", year, "-", (year+1) %% 100, ".csv")))
 df$datetime <- parse_date_time(df$datetime_beginning_ept, "mdY HMS Op", tz="America/New_York")
+df$yyyymmdd <- format(df$datetime, "%Y%m%d")
+
+## WILMINGTON NEW CASTLE CO AIRPORT, DE US
+## https://www.ncei.noaa.gov/pub/data/ghcn/daily/by_station/USW00013781.csv.gz
+weather <- read.csv("USW00013781.csv", header=F, col.names=c('id', 'yyyymmdd', 'element', 'value', 'mf', 'qf', 'sf', 'time'))
+weather2 <- dcast(weather, yyyymmdd ~ element)
+weather2$yyyymmdd <- as.character(weather2$yyyymmdd)
 
 df$holiday <- F
 for (datename in c('USNewYearsDay', 'USInaugurationDay', 'USMLKingsBirthday', 'USLincolnsBirthday', 'USWashingtonsBirthday', 'USMemorialDay', 'USIndependenceDay', 'USLaborDay', 'USColumbusDay', 'USElectionDay', 'USVeteransDay', 'USThanksgivingDay', 'USChristmasDay', 'USCPulaskisBirthday', 'USGoodFriday'))
@@ -27,23 +35,27 @@ df$yday.sin <- sin(df$yday * 2*pi / 365.25)
 df$hour.cos <- cos(df$hour * 2*pi / 24)
 df$hour.sin <- sin(df$hour * 2*pi / 24)
 
-df2 <- df %>% arrange(datetime) %>% mutate(lag1=lag(rmccp, 1), lag2=lag(rmccp, 2),
-                                           lag3=lag(rmccp, 3), lag4=lag(rmccp, 4),
-                                           lag1d=lag(rmccp, 24), lag2d=lag(rmccp, 48),
-                                           lag3d=lag(rmccp, 24*3), lag4d=lag(rmccp, 24*4),
-                                           lag5d=lag(rmccp, 24*5), lag6d=lag(rmccp, 24*6),
-                                           lag7d=lag(rmccp, 24*7),
-                                           pcplag2d=lag(rmpcp, 24*2),
-                                           pcplag3d=lag(rmpcp, 24*3), pcplag4d=lag(rmpcp, 24*4),
-                                           pcplag5d=lag(rmpcp, 24*5), pcplag6d=lag(rmpcp, 24*6),
-                                           pcplag7d=lag(rmpcp, 24*7),
-                                           rtlag2d=lag(total_pjm_rt_load_mwh, 24*2),
-                                           loclag2d=lag(total_pjm_loc_credit, 24*2),
-                                           rplag2d=lag(total_pjm_reg_purchases, 24*2),
-                                           ssrlag2d=lag(total_pjm_self_sched_reg, 24*2),
-                                           arlag2d=lag(total_pjm_assigned_reg, 24*2),
-                                           crlag2d=lag(total_pjm_rmccp_cr, 24*2),
-                                           pcpcrlag2d=lag(total_pjm_rmpcp_cr, 24*2))
+df2 <- df %>% left_join(weather2) %>%
+    arrange(datetime) %>% mutate(lag1=lag(rmccp, 1), lag2=lag(rmccp, 2),
+                                 lag3=lag(rmccp, 3), lag4=lag(rmccp, 4),
+                                 lag1d=lag(rmccp, 24), lag2d=lag(rmccp, 48),
+                                 lag3d=lag(rmccp, 24*3), lag4d=lag(rmccp, 24*4),
+                                 lag5d=lag(rmccp, 24*5), lag6d=lag(rmccp, 24*6),
+                                 lag7d=lag(rmccp, 24*7),
+                                 pcplag2d=lag(rmpcp, 24*2),
+                                 pcplag3d=lag(rmpcp, 24*3), pcplag4d=lag(rmpcp, 24*4),
+                                 pcplag5d=lag(rmpcp, 24*5), pcplag6d=lag(rmpcp, 24*6),
+                                 pcplag7d=lag(rmpcp, 24*7),
+                                 rtlag2d=lag(total_pjm_rt_load_mwh, 24*2),
+                                 loclag2d=lag(total_pjm_loc_credit, 24*2),
+                                 rplag2d=lag(total_pjm_reg_purchases, 24*2),
+                                 ssrlag2d=lag(total_pjm_self_sched_reg, 24*2),
+                                 arlag2d=lag(total_pjm_assigned_reg, 24*2),
+                                 crlag2d=lag(total_pjm_rmccp_cr, 24*2),
+                                 pcpcrlag2d=lag(total_pjm_rmpcp_cr, 24*2),
+                                 PRCP1d=lag(PRCP, 1), PRCP2d=lag(PRCP, 2),
+                                 TMAX1d=lag(TMAX, 1), TMAX2d=lag(TMAX, 2),
+                                 TMIN1d=lag(TMIN, 1), TMIN2d=lag(TMIN, 2))
 df2$rmccp[df2$rmccp == 0] <- 0.004 # 0.01 is lowest otherwise
 
 ggplot(df2, aes(datetime, rmccp)) +
@@ -58,9 +70,9 @@ summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag1d + lag2d + 
 
 summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag2 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d | factor(yday) + factor(hour), data=df2))
 
-summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag2 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d + pcplag2d + pcplag3d + pcplag4d + pcplag5d + pcplag6d + pcplag7d + rtlag2d + loclag2d + rplag2d + ssrlag2d + arlag2d + crlag2d + pcpcrlag2d | factor(yday) + factor(hour), data=df2))
+summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag2 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d + pcplag2d + pcplag3d + pcplag4d + pcplag5d + pcplag6d + pcplag7d + rtlag2d + loclag2d + rplag2d + ssrlag2d + arlag2d + crlag2d + pcpcrlag2d + TMAX + TMAX1d | factor(yday) + factor(hour), data=df2))
 
-df2$set <- c(rep(rep(1:4, each=24), floor(nrow(df2) / 96)), rep(1:3, each=24))
+df2$set <- rep(rep(1:4, each=24), ceiling(nrow(df2) / 96))[1:nrow(df2)]
 
 est.knn <- function(df2, covars, knum) {
     knnvals <- rep(NA, nrow(df2))
@@ -84,9 +96,9 @@ est.knn <- function(df2, covars, knum) {
 
 df2$holiday.f <- as.numeric(df2$holiday)
 
-df2$knn <- est.knn(df2, c('holiday.f', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'yday.cos', 'yday.sin', 'hour.cos', 'hour.sin', 'weekday'), 5)
+df2$knn <- est.knn(df2, c('holiday.f', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'yday.cos', 'yday.sin', 'hour.cos', 'hour.sin', 'weekday', 'TMAX2d', 'TMIN2d', 'PRCP2d'), 5)
 
-summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag2 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d + pcplag2d + pcplag3d + pcplag4d + pcplag5d + pcplag6d + pcplag7d + rtlag2d + loclag2d + rplag2d + ssrlag2d + arlag2d + crlag2d + pcpcrlag2d + knn | factor(yday) + factor(hour), data=df2))
+summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag2 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d + pcplag2d + pcplag3d + pcplag4d + pcplag5d + pcplag6d + pcplag7d + rtlag2d + loclag2d + rplag2d + ssrlag2d + arlag2d + crlag2d + pcpcrlag2d + TMAX1d + knn | factor(yday) + factor(hour), data=df2))
 
 ## Project forward from set i to set i + 2
 project.48 <- function(df2, covars) {
@@ -132,14 +144,14 @@ project.48 <- function(df2, covars) {
     finalpredicted
 }
 
-df2$predicted <- project.48(df2, c('datetime', 'holiday.f', 'lag1', 'lag2', 'lag1d', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'knn'))
+df2$predicted <- project.48(df2, c('datetime', 'holiday.f', 'lag1', 'lag2', 'lag1d', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'TMAX1d', 'knn'))
 
 ggplot(df2, aes(log(rmccp), predicted)) +
     geom_point() + geom_abline(yintercept=0, slope=1, colour='#808080') +
     theme_bw()
 
-allcovars.knn <- c('holiday', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'yday.cos', 'yday.sin', 'hour.cos', 'hour.sin', 'weekday')
-allcovars.lfe <- c('datetime', 'holiday.f', 'lag1', 'lag2', 'lag1d', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'knn')
+allcovars.knn <- c('holiday', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'yday.cos', 'yday.sin', 'hour.cos', 'hour.sin', 'weekday', 'TMAX2d', 'TMIN2d', 'PRCP2d')
+allcovars.lfe <- c('datetime', 'holiday.f', 'lag1', 'lag2', 'lag1d', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'TMAX2d', 'TMIN2d', 'PRCP2d', 'knn')
 
 df2$knn <- est.knn(df2, allcovars.knn, 5)
 df2$predicted <- project.48(df2, allcovars.lfe)
@@ -151,10 +163,16 @@ best.knum <- 5
 best.rmse <- rmse
 for (ii in 1:1000) {
     print(ii)
-    ## Randomly select
-    try.covars.knn <- sample(allcovars.knn, 2 + floor(runif(1) * (length(allcovars.knn) - 2)))
-    try.covars.lfe <- sample(allcovars.lfe, 2 + floor(runif(1) * (length(allcovars.lfe) - 2)))
-    try.knum <- ceiling(runif(1) * 20)
+    ## Try to mutate: drop 1 and add up to 2
+    try.covars.knn <- unique(c(sample(best.covars.knn, length(best.covars.knn)-1), sample(allcovars.knn, 2)))
+    try.covars.lfe <- unique(c(sample(best.covars.lfe, length(best.covars.lfe)-1), sample(allcovars.lfe, 2)))
+    try.knum <- best.knum + sample(-1:1, 1)
+    if (identical(sort(try.covars.knn), sort(best.covars.knn)) && identical(sort(try.covars.lfe), sort(best.covars.lfe))) {
+        ## Randomly select
+        try.covars.knn <- sample(allcovars.knn, 2 + floor(runif(1) * (length(allcovars.knn) - 2)))
+        try.covars.lfe <- sample(allcovars.lfe, 2 + floor(runif(1) * (length(allcovars.lfe) - 2)))
+        try.knum <- ceiling(runif(1) * 20)
+    }
 
     if ('knn' %in% try.covars.lfe)
         df2$knn <- est.knn(df2, try.covars.knn, try.knum)
@@ -178,7 +196,9 @@ df2$predicted <- project.48(df2, best.covars.lfe)
 sqrt(mean((log(df2$rmccp) - df2$predicted)^2, na.rm=T))
 
 ggplot(df2, aes(log(rmccp), predicted)) +
-    geom_point() + geom_abline(yintercept=0, slope=1, colour='#808080') +
-    theme_bw()
+    geom_point(alpha=.025) + geom_abline(yintercept=0, slope=1, colour='#808080') +
+    theme_bw() + xlab("Log of realized regulation price") + ylab("Log of predicted regular price") +
+    xlim(-3, 7) + ylim(0, 6)
+ggsave("predprice.png", width=6.5, height=5)
 
 save(best.covars.knn, best.knum, best.covars.lfe, file="predprice.RData")

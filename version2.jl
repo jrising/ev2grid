@@ -10,6 +10,7 @@ energy_min = 0.
 energy_max = vehicle_capacity * vehicles
 
 probfail_penalty = 10.
+probfail_limit = 0.01
 
 """
 Optimize the cost using Bellman optimization for a stochastic process.
@@ -113,11 +114,6 @@ function optimize(dt0::DateTime, SS::Int, regrange::Float64)
 
         probfailbyact = probfailsummc / mcdraws
 
-        # if all(.!isfinite.(VV1byact[:, 1, 2, 2]))
-        #     println("Cannot support .3")
-        #     break
-        # end
-
         bestact = dropdims(argmax(VV1byact - probfail_penalty * probfailbyact, dims=1), dims=1);
         strat[tt, :, :, :] .= Base.Fix2(getindex, 1).(bestact);
 
@@ -131,27 +127,32 @@ function optimize(dt0::DateTime, SS::Int, regrange::Float64)
 end
 
 dt0 = DateTime("2024-07-15T12:00:00")
-
-for regrange in range(energy_min, energy_max * (.90 - .3) / 2, length=10)
-    regrange = (energy_max * (.90 - .3) / 2) / 2
-    strat, probfail = optimize(dt0, SS, regrange)
-
-    simu_strat
-end
-
 vehicles_plugged_1 = 4.
+enerfrac_plugged_1 = 0.5
 
-pp = nothing
-for enerfrac_plugged_1 in range(enerfrac_min, enerfrac_max, FF-1)
-    local enerfrac_driving_1 = enerfrac_plugged_1
-    local df = simu_strat(dt0, strat, vehicles_plugged_1, enerfrac_plugged_1, enerfrac_driving_1)
-    global pp
+##for regrange in range(energy_min, energy_max * (.90 - .3) / 2, length=10)
 
-    if pp == nothing
-        pp = plot(df.datetime, (df.enerfrac_plugged .* df.vehicles_plugged + df.enerfrac_driving .* (vehicles .- df.vehicles_plugged)) / vehicles, seriestype=:line, label=enerfrac_plugged_1, legend=false)
+regrange = (energy_max * (.90 - .3) / 2) / 2
+strat, probfail = optimize(dt0, SS, regrange);
+
+mcdraws = 20
+
+dfall = nothing
+for ii in 1:mcdraws
+    df = simu_strat(dt0, strat, vehicles_plugged_1, enerfrac_plugged_1, 0., true)
+    energy = vehicle_capacity * df.vehicles_plugged * (1 - df.portion_below) * df.enerfrac_above
+    energy_minallow = vehicle_capacity * df.vehicles_plugged * (1 - df.portion_below) * 0.3
+    energy_maxallow = vehicle_capacity * df.vehicles_plugged * (1 - df.portion_below) * 0.95
+    df[!, :regrange_avail] = min.(energy_maxallow - energy, energy - energy_minallow)
+
+    if dfall == nothing
+        dfall = df
     else
-        plot!(pp, df.datetime, (df.enerfrac_plugged .* df.vehicles_plugged + df.enerfrac_driving .* (vehicles .- df.vehicles_plugged)) / vehicles, seriestype=:line, label=enerfrac_plugged_1, legend=false)
+        extend!(dfall, df)
     end
 end
 
-pp
+## TODO: Calculate available regrange under probfail_limit
+dfall %>% group_by(datetime) %>% summarize(regrange=quantile(regrange, 1 - probfail_limit))
+## TODO: replace regrange by vector, and cue onmarket by > 0
+## TODO: random gradient search to find optimum

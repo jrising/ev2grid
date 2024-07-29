@@ -1,3 +1,18 @@
+################################################################################
+# Filename: cusomter.jl
+# Description: Information about the fleet of cars available for charging.
+#
+# Notes:
+# - This file contains functions/scripts for <specific task/purpose>.
+# - <Any special notes or instructions>.
+#
+# Usage:
+# To use this <function/script>, call <function_name>(<params>) or
+# run the script with `julia <your_filename_here>.jl`.
+#
+################################################################################
+
+
 # Inputs from current state
 vehicles = 4.
 vehicle_capacity = 75.7 # kWh / vehicle
