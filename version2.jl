@@ -4,13 +4,20 @@
 # Choose whichever provides the maximum expected profit in the known initial state
 # Current version assumes available always except 8am - 6pm; future versions could impose more complicated timeseries of reg-available
 
+using CSV
 include("version1.jl")
 
 energy_min = 0.
 energy_max = vehicle_capacity * vehicles
 
+RR = 5 # number of possible regrange values
+
 probfail_penalty = 10.
 probfail_limit = 0.01
+
+pricedf = CSV.read("predprice.csv", DataFrame)
+
+## TODO: Add vector of regrange "actions" in optimize, and calculate optimal VV1 under each one, then choose optimal regrange action.
 
 """
 Optimize the cost using Bellman optimization for a stochastic process.
@@ -22,8 +29,9 @@ Returns:
 - strat: SSxEE matrix representing the optimal strategy.
 
 """
-function optimize(dt0::DateTime, SS::Int, regrange::Float64)
+function optimize(dt0::DateTime, probstate::Array{Float64, 3})
     strat = zeros(Int64, SS-1, EE, FF, FF);
+    optregrange = zeros(Float64, SS-1);
 
     # Construct dimensions
     enerfrac_range = [0.; range(enerfrac_min, enerfrac_max, FF-1)];
@@ -46,9 +54,9 @@ function optimize(dt0::DateTime, SS::Int, regrange::Float64)
     energy_minallow = [vehicle_capacity * vehicles_plugged_range[ee] * (1. - vehicle_split[ff][1]) * 0.3 for ee=1:EE, ff=1:FF]
     energy_maxallow = [vehicle_capacity * vehicles_plugged_range[ee] * (1. - vehicle_split[ff][1]) * 0.95 for ee=1:EE, ff=1:FF]
     energy_bystate = [vehicle_capacity * vehicles_plugged_range[ee] * (1. - vehicle_split[ff][1]) * vehicle_split[ff][3] for ee=1:EE, ff=1:FF]
-    regrange_good = (energy_bystate .- regrange .> energy_minallow) .& (energy_bystate .+ regrange .< energy_maxallow)
-    regrange_fail_bystate = 1. .- repeat(regrange_good, 1, 1, FF);
-    regrange_fail_byact = repeat(reshape(regrange_fail_bystate, 1, EE, FF, FF), PP);
+    energy_maxregrange_bystate = min.(energy_maxallow .- energy_bystate, energy_bystate - energy_minallow)
+
+    regrange_range = collect(range(0., maximum(energy_maxregrange_bystate), RR))
 
     probfail = zeros(Float64, EE, FF, FF); # Sum over periods looking forward
 
@@ -71,69 +79,74 @@ function optimize(dt0::DateTime, SS::Int, regrange::Float64)
         valuepns_byaction = valuepns[ff12_byaction];
         valuee_byaction = valuee[ff12_byaction];
 
-        # Check if we are on the market
-        date_part = Dates.Date(dt1)
-        if date_part != Dates.Date(dt0)
-            dt_8am = DateTime(date_part, Dates.Time(8, 0, 0))
-            dt_6pm = DateTime(date_part, Dates.Time(18, 0, 0))
-            if dt1 < dt_8am || dt1 ≥ dt_6pm
-                onmarket = true
-            else
-                onmarket = false
+        bestregrange = -1.
+        beststrat = zeros(Int64, EE, FF, FF);
+        bestVV2 = zeros(Float64, EE, FF, FF);
+        bestprobfail = zeros(Float64, EE, FF, FF);
+        bestvalue = -Inf
+
+        for regrange in regrange_range
+            VV1byactsummc = zeros(Float64, PP, EE, FF, FF);
+            probfailsummc = zeros(Float64, PP, EE, FF, FF);
+
+            regrange_good = (energy_bystate .- regrange .> energy_minallow) .& (energy_bystate .+ regrange .< energy_maxallow)
+            regrange_fail_bystate = 1. .- repeat(regrange_good, 1, 1, FF);
+            regrange_fail_byact = repeat(reshape(regrange_fail_bystate, 1, EE, FF, FF), PP);
+
+            for mc in 1:mcdraws
+                if mcdraws == 1
+                    simustep = get_simustep_deterministic(dt1)
+                else
+                    simustep = get_simustep_stochastic(dt1)
+                end
+                state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 =
+                    simustate2(simustep, vehicles_plugged_range, vehicle_split, ff12_byaction, enerfrac1_byaction, enerfrac_range);
+                VV1byactthismc = calcVV1byact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
+                VV1byactsummc += VV1byactthismc;
+
+                if regrange > 0
+                    ## Calculate probability of falling outside of allowed range
+                    probfailthismc = calcVV1byact(probfail .+ regrange_fail_bystate, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3) .+ regrange_fail_byact;
+                else
+                    # no additional probfail
+                    probfailthismc = calcVV1byact(probfail, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
+                end
+
+                probfailsummc += probfailthismc
             end
-        else
-            onmarket = false
+
+            VV1byact = VV1byactsummc / mcdraws + valuep + valuepns_byaction + valuee_byaction * hourly_valuee;
+            VV1byact[isnan.(VV1byact)] .= -Inf
+
+            probfailbyact = probfailsummc / mcdraws
+
+            bestact = dropdims(argmax(VV1byact - probfail_penalty * probfailbyact, dims=1), dims=1);
+
+            thisVV2 = VV1byact[bestact];
+            thisvalue = probstate .* thisVV2
+            if thisvalue > bestvalue
+                bestvalue = thisvalue
+                beststrat = Base.Fix2(getindex, 1).(bestact);
+                bestVV2 = thisVV2;
+                bestprobfail = probfailbyact[bestact]
+                bestregrange = regrange
+            end
         end
 
-        VV1byactsummc = zeros(Float64, PP, EE, FF, FF);
-        probfailsummc = zeros(Float64, PP, EE, FF, FF);
-
-        for mc in 1:mcdraws
-            if mcdraws == 1
-                simustep = get_simustep_deterministic(dt1)
-            else
-                simustep = get_simustep_stochastic(dt1)
-            end
-            state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 =
-                simustate2(simustep, vehicles_plugged_range, vehicle_split, ff12_byaction, enerfrac1_byaction, enerfrac_range);
-            VV1byactthismc = calcVV1byact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
-            VV1byactsummc += VV1byactthismc;
-
-            if onmarket
-                ## Calculate probability of falling outside of allowed range
-                probfailthismc = calcVV1byact(probfail .+ regrange_fail_bystate, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3) .+ regrange_fail_byact;
-            else
-                # no additional probfail
-                probfailthismc = calcVV1byact(probfail, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
-            end
-            probfailsummc += probfailthismc
-        end
-
-        VV1byact = VV1byactsummc / mcdraws + valuep + valuepns_byaction + valuee_byaction * hourly_valuee;
-        VV1byact[isnan.(VV1byact)] .= -Inf
-
-        probfailbyact = probfailsummc / mcdraws
-
-        bestact = dropdims(argmax(VV1byact - probfail_penalty * probfailbyact, dims=1), dims=1);
-        strat[tt, :, :, :] .= Base.Fix2(getindex, 1).(bestact);
-
-        VV2 = VV1byact[bestact]
-        VV2[isnan.(VV2)] .= -Inf
-
-        probfail = probfailbyact[bestact]
+        strat[tt, :, :, :] .= beststrat
+        VV2 = bestVV2
+        probfail = bestprobfail
     end
 
     return strat, probfail
 end
 
-dt0 = DateTime("2024-07-15T12:00:00")
+dt0 = DateTime("2023-07-15T12:00:00")
 vehicles_plugged_1 = 4.
 enerfrac_plugged_1 = 0.5
+probstate = repeat(ones(1, EE, FF) / (EE * FF), SS-1)
 
-##for regrange in range(energy_min, energy_max * (.90 - .3) / 2, length=10)
-
-regrange = (energy_max * (.90 - .3) / 2) / 2
-strat, probfail = optimize(dt0, SS, regrange);
+strat, probfail = optimize(dt0, probstate)
 
 mcdraws = 20
 
@@ -152,7 +165,7 @@ for ii in 1:mcdraws
     end
 end
 
+## TODO: Construct new probstate
+## TODO: Iterate with new optimize until converges
 ## TODO: Calculate available regrange under probfail_limit
 dfall %>% group_by(datetime) %>% summarize(regrange=quantile(regrange, 1 - probfail_limit))
-## TODO: replace regrange by vector, and cue onmarket by > 0
-## TODO: random gradient search to find optimum

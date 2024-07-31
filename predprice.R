@@ -100,9 +100,17 @@ df2$knn <- est.knn(df2, c('holiday.f', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6
 
 summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag2 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d + pcplag2d + pcplag3d + pcplag4d + pcplag5d + pcplag6d + pcplag7d + rtlag2d + loclag2d + rplag2d + ssrlag2d + arlag2d + crlag2d + pcpcrlag2d + TMAX1d + knn | factor(yday) + factor(hour), data=df2))
 
+project.48.felm <- function(df2, covars) {
+    felm(as.formula(paste("log(rmccp) ~", paste(covars, collapse=" + "), "| factor(yday) + factor(hour) + factor(weekday)")), data=df2)
+}
+
 ## Project forward from set i to set i + 2
-project.48 <- function(df2, covars) {
-    mod <- felm(as.formula(paste("log(rmccp) ~", paste(covars, collapse=" + "), "| factor(yday) + factor(hour) + factor(weekday)")), data=df2)
+project.48 <- function(df2, covars, get.se=F, use.mod=NULL) {
+    if (is.null(use.mod)) {
+        mod <- project.48.felm(df2, covars)
+    } else {
+        mod <- use.mod
+    }
 
     modfe <- getfe(mod)
     modfe.yday <- subset(modfe, fe == 'factor(yday)')
@@ -113,11 +121,17 @@ project.48 <- function(df2, covars) {
     modfe.weekday$idx <- as.character(modfe.weekday$idx)
 
     finalpredicted <- rep(NA, nrow(df2))
+    if (get.se)
+        finalse <- rep(NA, nrow(df2))
+
     daybegins <- seq(1, nrow(df2), by=24)
     daybeginsets <- ((1:length(daybegins)) - 1) %% 4 + 1
     for (trainset in 1:4) {
         predicted <- rep(NA, nrow(df2))
         predicted[df2$set == trainset] <- df2$rmccp[df2$set == trainset]
+        if (get.se)
+            thisse <- rep(NA, nrow(df2))
+
         predstart <- daybegins[daybeginsets == ((trainset - 1 + 1) %% 4) + 1]
         if (trainset == 4)
             predstart <- predstart[-1]
@@ -135,13 +149,26 @@ project.48 <- function(df2, covars) {
             hourfe <- sapply(df2$hour[predstart + tt], function(hour) modfe.hour$effect[modfe.hour$idx == hour][1])
             weekdayfe <- sapply(df2$weekday[predstart + tt], function(weekday) modfe.weekday$effect[modfe.weekday$idx == weekday][1])
 
-            predicted[predstart[predvalid] + tt] <- predict.felm(mod, preddf)$fit + (ydayfe + hourfe + weekdayfe)[predvalid]
+            if (get.se) {
+                fitse <- predict.felm(mod, preddf, se.fit=T)
+                predicted[predstart[predvalid] + tt] <- fitse$fit$fit + (ydayfe + hourfe + weekdayfe)[predvalid]
+
+                thisse[predstart[predvalid] + tt] <- fitse$se.fit
+            } else {
+                predicted[predstart[predvalid] + tt] <- predict.felm(mod, preddf)$fit + (ydayfe + hourfe + weekdayfe)[predvalid]
+            }
         }
 
         finalpredicted[df2$set == ((trainset - 1 + 2) %% 4) + 1] <- predicted[df2$set == ((trainset - 1 + 2) %% 4) + 1]
+        if (get.se)
+            finalse[df2$set == ((trainset - 1 + 2) %% 4) + 1] <- thisse[df2$set == ((trainset - 1 + 2) %% 4) + 1]
     }
 
-    finalpredicted
+    if (get.se) {
+        return(list(predicted=finalpredicted, se=finalse))
+    } else {
+        return(finalpredicted)
+    }
 }
 
 df2$predicted <- project.48(df2, c('datetime', 'holiday.f', 'lag1', 'lag2', 'lag1d', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'TMAX1d', 'knn'))
@@ -188,6 +215,8 @@ for (ii in 1:1000) {
     }
 }
 
+## load("predprice.RData")
+
 allcovars.knn[!(allcovars.knn %in% best.covars.knn)]
 allcovars.lfe[!(allcovars.lfe %in% best.covars.lfe)]
 
@@ -202,3 +231,14 @@ ggplot(df2, aes(log(rmccp), predicted)) +
 ggsave("predprice.png", width=6.5, height=5)
 
 save(best.covars.knn, best.knum, best.covars.lfe, file="predprice.RData")
+
+## Bootstrap full result
+for (bs in 1:20) {
+    print(bs)
+    df2.bs <- df2[sample(1:nrow(df2), nrow(df2), replace=T),]
+    df2.bs$knn <- est.knn(df2.bs, best.covars.knn, best.knum)
+    mod <- project.48.felm(df2.bs, best.covars.lfe)
+    df2[, paste0("predbs", bs)] <- project.48(df2, best.covars.lfe, use.mod=mod)
+}
+
+write.csv(df2[, c('datetime', 'rmccp', 'predicted', paste0("predbs", 1:20))], "predprice.csv", row.names=F)

@@ -17,7 +17,7 @@ using ArgCheck
 include("utils.jl")
 include("customer.jl")
 include("simulate.jl")
-include("retail.jl")
+include("src/retail.jl")
 
 # General configuration
 

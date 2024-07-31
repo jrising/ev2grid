@@ -36,7 +36,7 @@ pp = plot(df.datetime, (df.enerfrac_plugged .* df.vehicles_plugged + df.enerfrac
 Plot a strategy over time.
 """
 function simu_strat(dt0::DateTime, strat::AbstractArray{Int}, vehicles_plugged_1::Float64, enerfrac_plugged_1::Float64, enerfrac_driving_1::Float64, stochastic::Bool=false)
-    rows = Tuple{DateTime, Float64, Float64, Float64, Float64, Float64, Float64, Union{Missing, Float64}, Union{Missing, Tuple{Int, Int, Int}}}[]
+    rows = Tuple{DateTime, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Union{Missing, Float64}, Union{Missing, Tuple{Int, Int, Int}}}[]
 
     enerfrac_needed = enerfrac_scheduled(dt0 + periodstep(1))
     vehicle_split = split_below(enerfrac_plugged_1, enerfrac_needed)
