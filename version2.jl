@@ -16,8 +16,7 @@ probfail_penalty = 10.
 probfail_limit = 0.01
 
 pricedf = CSV.read("predprice.csv", DataFrame)
-
-## TODO: Add vector of regrange "actions" in optimize, and calculate optimal VV1 under each one, then choose optimal regrange action.
+pricedf[!, :datetime] = DateTime.(replace.(pricedf.datetime, " " => "T"))
 
 """
 Optimize the cost using Bellman optimization for a stochastic process.
@@ -29,7 +28,7 @@ Returns:
 - strat: SSxEE matrix representing the optimal strategy.
 
 """
-function optimize(dt0::DateTime, probstate::Array{Float64, 3})
+function optimize(dt0::DateTime, probstate::Array{Float64, 4})
     strat = zeros(Int64, SS-1, EE, FF, FF);
     optregrange = zeros(Float64, SS-1);
 
@@ -40,6 +39,7 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 3})
     # Construct exogenous change levels
     denerfrac_FF = [make_actions(enerfrac_plugged) for enerfrac_plugged=enerfrac_range];
     denerfrac = [denerfrac_FF[ff][pp] for pp=1:PP, vehicles_plugged=vehicles_plugged_range, ff=1:FF, enerfrac_driving=enerfrac_range];
+    energy_denerfrac_byact = [vehicles_plugged_range[ee] * vehicle_capacity * denerfrac[pp] for pp=1:PP, ee=1:EE]
 
     enerfrac0_byaction = repeat(reshape(enerfrac_range, 1, 1, FF, 1), PP, EE, 1, FF);
 
@@ -79,6 +79,9 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 3})
         valuepns_byaction = valuepns[ff12_byaction];
         valuee_byaction = valuee[ff12_byaction];
 
+        pricedfrow = pricedf[pricedf.datetime .== dt1, :] # only works if timestep is whole hours
+        regprice = pricedfrow.predpe[1] # XXX: Later use uncertainty
+
         bestregrange = -1.
         beststrat = zeros(Int64, EE, FF, FF);
         bestVV2 = zeros(Float64, EE, FF, FF);
@@ -92,6 +95,8 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 3})
             regrange_good = (energy_bystate .- regrange .> energy_minallow) .& (energy_bystate .+ regrange .< energy_maxallow)
             regrange_fail_bystate = 1. .- repeat(regrange_good, 1, 1, FF);
             regrange_fail_byact = repeat(reshape(regrange_fail_bystate, 1, EE, FF, FF), PP);
+            # Also disallow actions that would overextend our total charge range
+            regrange_good_byact = [(energy_bystate[ee, ff1] .- regrange + energy_denerfrac_byact[pp, ee] .> energy_minallow[ee, ff1]) .& (energy_bystate[ee, ff1] .+ regrange + energy_denerfrac_byact[pp, ee] .< energy_maxallow[ee, ff1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF]
 
             for mc in 1:mcdraws
                 if mcdraws == 1
@@ -106,7 +111,7 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 3})
 
                 if regrange > 0
                     ## Calculate probability of falling outside of allowed range
-                    probfailthismc = calcVV1byact(probfail .+ regrange_fail_bystate, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3) .+ regrange_fail_byact;
+                    probfailthismc = calcVV1byact(probfail .+ regrange_fail_bystate, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3) .+ regrange_fail_byact .+ (1 .- regrange_good_byact);
                 else
                     # no additional probfail
                     probfailthismc = calcVV1byact(probfail, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
@@ -123,49 +128,79 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 3})
             bestact = dropdims(argmax(VV1byact - probfail_penalty * probfailbyact, dims=1), dims=1);
 
             thisVV2 = VV1byact[bestact];
-            thisvalue = probstate .* thisVV2
+            thisprobfail = probfailbyact[bestact]
+            thisvalue = sum(probstate[tt, :, :, :] .* (thisVV2 .+ regprice * regrange * (1 .- thisprobfail)))
             if thisvalue > bestvalue
                 bestvalue = thisvalue
                 beststrat = Base.Fix2(getindex, 1).(bestact);
                 bestVV2 = thisVV2;
-                bestprobfail = probfailbyact[bestact]
+                bestprobfail = thisprobfail
                 bestregrange = regrange
             end
         end
 
+        optregrange[tt] = bestregrange
         strat[tt, :, :, :] .= beststrat
         VV2 = bestVV2
         probfail = bestprobfail
     end
 
-    return strat, probfail
+    return strat, probfail, optregrange
 end
 
 dt0 = DateTime("2023-07-15T12:00:00")
 vehicles_plugged_1 = 4.
 enerfrac_plugged_1 = 0.5
-probstate = repeat(ones(1, EE, FF) / (EE * FF), SS-1)
 
-strat, probfail = optimize(dt0, probstate)
+probstate = zeros(SS-1, EE, FF, FF);
+df = simu_inactive(dt0, vehicles_plugged_1, enerfrac_plugged_1, enerfrac_driving_1)
+for ii in 1:nrow(df)
+    statebase, stateceil1, probbase1, stateceil2, probbase2, stateceil3, probbase3 = breakstate((df.vehicles_plugged[ii], df.enerfrac_plugged[ii], df.enerfrac_driving[ii]))
+    probstate[statebase] = (probbase1 + probbase2 + probbase3) / 3
+    probstate[makeindex1.(state2base, state2ceil1)] = (1 .- probbase1) / 3
+    probstate[makeindex2.(state2base, state2ceil2)] = (1 .- probbase2) / 3
+    probstate[makeindex3.(state2base, state2ceil3)] = (1 .- probbase3) / 3
+end
+
+probstate = probstate / 2 .+ repeat(ones(1, EE, FF, FF) / (EE * FF * FF), SS-1) / 2;
+
+mcdraws = 1
+strat, probfail, optregrange = optimize(dt0, probstate);
+df = simu_strat(dt0, strat, vehicles_plugged_1, enerfrac_plugged_1, 0.)
+df[!, :optregrange] = optregrange
+pp = plot(df.datetime, (df.enerfrac_plugged .* df.vehicles_plugged + df.enerfrac_driving .* (vehicles .- df.vehicles_plugged)) / vehicles, seriestype=:line, label="")
+subdf = df[df.optregrange .> 0, :]
+plot!(pp, subdf.datetime, subdf.enerfrac_plugged + subdf.optregrange / (vehicles * vehicle_capacity), seriestype=:point)
+plot!(pp, subdf.datetime, subdf.enerfrac_plugged - subdf.optregrange / (vehicles * vehicle_capacity), seriestype=:point)
+pp
 
 mcdraws = 20
 
 dfall = nothing
 for ii in 1:mcdraws
     df = simu_strat(dt0, strat, vehicles_plugged_1, enerfrac_plugged_1, 0., true)
-    energy = vehicle_capacity * df.vehicles_plugged * (1 - df.portion_below) * df.enerfrac_above
-    energy_minallow = vehicle_capacity * df.vehicles_plugged * (1 - df.portion_below) * 0.3
-    energy_maxallow = vehicle_capacity * df.vehicles_plugged * (1 - df.portion_below) * 0.95
+    energy = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) .* df.enerfrac_above
+    energy_minallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.3
+    energy_maxallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.95
     df[!, :regrange_avail] = min.(energy_maxallow - energy, energy - energy_minallow)
 
     if dfall == nothing
         dfall = df
     else
-        extend!(dfall, df)
+        append!(dfall, df)
     end
 end
 
-## TODO: Construct new probstate
+probstate = zeros(SS-1, EE, FF, FF);
+for tt in 1:SS-1
+    dt1 = dt0 + periodstep(tt)
+
+    for state in unique(dfall.state[dfall.datetime .== dt1])
+        probstate[tt, state...] = sum(map(rowstate -> rowstate == state, dfall.state[dfall.datetime .== dt1])) / sum(dfall.datetime .== dt1)
+    end
+end
+
 ## TODO: Iterate with new optimize until converges
 ## TODO: Calculate available regrange under probfail_limit
 dfall %>% group_by(datetime) %>% summarize(regrange=quantile(regrange, 1 - probfail_limit))
+## TODO: Use predprice with bootstraps to identify real value

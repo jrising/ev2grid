@@ -1,6 +1,5 @@
 using Dates, DataFrames
-using StatsBase, Random, Distributions
-using Roots
+using StatsBase, Random
 using Plots
 using HolidayCalendars, RDates
 using ArgCheck
@@ -15,13 +14,12 @@ using ArgCheck
 ## Transition to state2 at end of timestep
 
 include("utils.jl")
-include("customer.jl")
+include("src/customer.jl")
 include("simulate.jl")
 include("src/retail.jl")
 
 # General configuration
 
-timestep = 1. # 1 hour
 SS = 36 # project for 1.5 days
 # Noon to following midnight
 mcdraws = 1 # 1 for deterministic
@@ -46,9 +44,6 @@ prob_event_vehicles = [0.5, .25, .125, .125]
 prob_event_return = 0.25
 prob_delayed_return = 0.1
 
-enerfrac_min = 0.3
-enerfrac_max = 1.0
-
 include("value.jl")
 include("optutils.jl")
 
@@ -69,35 +64,6 @@ function make_actions(enerfrac0::Float64)
 end
 
 ## make_actions(0.5)
-
-"""
-For a given enerfrac_plugged, determine the portion of the plugged-in fleet below the prescribed level
-Returns:
- - portion of vehicles below the level
- - enerfrac for low-power portion
- - enerfrac for high-power portion
-"""
-function split_below(enerfrac_plugged::Float64, enerfrac_needed::Float64)
-    # Limits come from truncated(Normal(mu, 0.05), lower=0., upper=1.)
-    if enerfrac_plugged ≤ 0.03989422804014327
-        return 1.0, 0.0, enerfrac_needed
-    elseif enerfrac_plugged ≥ 0.9601057719598567
-        return 0.0, enerfrac_needed, 1.0
-    end
-    ## Use normal distribution, so I can calculate means of truncated
-    # Need to get a truncated normal with the desired mean
-    f(mu) = mean(truncated(Normal(mu, 0.05), lower=0., upper=1.)) - enerfrac_plugged
-    mu = find_zero(f, (0., 1.))
-    dist = truncated(Normal(mu, 0.05), lower=0., upper=1.)
-    portion_below = cdf(dist, enerfrac_needed)
-    portion_below, mean(truncated(dist, upper=enerfrac_needed)), mean(truncated(dist, lower=enerfrac_needed))
-end
-
-split_below(0.5, 0.5)
-split_below(0.5, 0.3)
-split_below(0.7, 0.3)
-split_below(0.3, 0.3)
-split_below(0.1, 0.3)
 
 """
 Optimize the cost using Bellman optimization for a stochastic process.

@@ -225,12 +225,16 @@ df2$predicted <- project.48(df2, best.covars.lfe)
 sqrt(mean((log(df2$rmccp) - df2$predicted)^2, na.rm=T))
 
 ggplot(df2, aes(log(rmccp), predicted)) +
-    geom_point(alpha=.025) + geom_abline(yintercept=0, slope=1, colour='#808080') +
+    geom_point(alpha=.025) + geom_abline(intercept=0, slope=1, colour='#808080') +
     theme_bw() + xlab("Log of realized regulation price") + ylab("Log of predicted regular price") +
     xlim(-3, 7) + ylim(0, 6)
 ggsave("predprice.png", width=6.5, height=5)
 
 save(best.covars.knn, best.knum, best.covars.lfe, file="predprice.RData")
+
+## Add levels version of predicted
+resvar = var(log(df2$rmccp) - df2$predicted, na.rm=T)
+df2$predpe = exp(df2$predicted + resvar / 2)
 
 ## Bootstrap full result
 for (bs in 1:20) {
@@ -238,7 +242,9 @@ for (bs in 1:20) {
     df2.bs <- df2[sample(1:nrow(df2), nrow(df2), replace=T),]
     df2.bs$knn <- est.knn(df2.bs, best.covars.knn, best.knum)
     mod <- project.48.felm(df2.bs, best.covars.lfe)
-    df2[, paste0("predbs", bs)] <- project.48(df2, best.covars.lfe, use.mod=mod)
+    predlog <- project.48(df2, best.covars.lfe, use.mod=mod)
+    resvar = var(log(df2$rmccp) - predlog, na.rm=T)
+    df2[, paste0("predbs", bs)] <- exp(predlog + resvar / 2)
 }
 
-write.csv(df2[, c('datetime', 'rmccp', 'predicted', paste0("predbs", 1:20))], "predprice.csv", row.names=F)
+write.csv(df2[!is.na(df2$predpe), c('datetime', 'rmccp', 'predpe', paste0("predbs", 1:20))], "predprice.csv", row.names=F)

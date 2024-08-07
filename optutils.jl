@@ -32,18 +32,6 @@ makeindex1(state2base::Tuple{Int64, Int64, Int64}, state2ceil::Int) = CartesianI
 makeindex2(state2base::Tuple{Int64, Int64, Int64}, state2ceil::Int) = CartesianIndex(state2base[1], state2ceil, state2base[3])
 makeindex3(state2base::Tuple{Int64, Int64, Int64}, state2ceil::Int) = CartesianIndex(state2base[1], state2base[2], state2ceil)
 
-function adjust_below(tup::Tuple{Float64, Float64, Float64}, enerfrac_below::Float64, vehicles_below::Float64)
-    vehicles_plugged = tup[1] + vehicles_below
-    @assert vehicles_plugged ≤ vehicles + 1e-8
-
-    if vehicles_plugged > 0
-        enerfrac_plugged = (enerfrac_below * vehicles_below + tup[2] * tup[1]) / vehicles_plugged
-    else
-        enerfrac_plugged = tup[2]
-    end
-    (vehicles_plugged, enerfrac_plugged, tup[3])
-end
-
 function breakstate(tup::Tuple{Float64, Float64, Float64})
     state = asstate_float(tup);
     statebase = basestate(state);

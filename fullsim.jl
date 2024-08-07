@@ -1,7 +1,9 @@
+using Dates
+
 """
 Simulate without a strategy for SS time steps.
 """
-function simu_inactive(dt0::DateTime, SS::Int, vehicles_plugged_1::Float64, enerfrac_plugged_1::Float64, enerfrac_driving_1::Float64)
+function simu_inactive(dt0::DateTime, vehicles_plugged_1::Float64, enerfrac_plugged_1::Float64, enerfrac_driving_1::Float64)
     # datetime, enerfrac_needed, vehicles_plugged_1, portion_below, enerfrac_toadd_below, enerfrac_avail_1, enerfrac_driving_1
     rows = Tuple{DateTime, Float64, Float64, Float64, Float64, Float64, Float64}[]
 
@@ -24,13 +26,6 @@ function simu_inactive(dt0::DateTime, SS::Int, vehicles_plugged_1::Float64, ener
     df = DataFrame(rows)
     rename!(df, [:datetime, :enerfrac_needed, :vehicles_plugged, :portion_below, :enerfrac_below, :enerfrac_plugged, :enerfrac_driving])
 end
-
-vehicles_plugged_1 = 4.
-enerfrac_plugged_1 = 0.5
-enerfrac_driving_1 = 0.5
-df = simu_inactive(dt0, SS, vehicles_plugged_1, enerfrac_plugged_1, enerfrac_driving_1)
-
-pp = plot(df.datetime, (df.enerfrac_plugged .* df.vehicles_plugged + df.enerfrac_driving .* (vehicles .- df.vehicles_plugged)) / vehicles, seriestype=:line, label="")
 
 """
 Plot a strategy over time.
@@ -72,19 +67,3 @@ function simu_strat(dt0::DateTime, strat::AbstractArray{Int}, vehicles_plugged_1
     rename!(df, [:datetime, :enerfrac_needed, :vehicles_plugged, :portion_below, :enerfrac_below, :enerfrac_above, :enerfrac_plugged, :enerfrac_driving, :denerfrac, :state])
 end
 
-vehicles_plugged_1 = 4.
-
-pp = nothing
-for enerfrac_plugged_1 in range(enerfrac_min, enerfrac_max, FF-1)
-    local enerfrac_driving_1 = enerfrac_plugged_1
-    local df = simu_strat(dt0, strat, vehicles_plugged_1, enerfrac_plugged_1, enerfrac_driving_1)
-    global pp
-
-    if pp == nothing
-        pp = plot(df.datetime, (df.enerfrac_plugged .* df.vehicles_plugged + df.enerfrac_driving .* (vehicles .- df.vehicles_plugged)) / vehicles, seriestype=:line, label=enerfrac_plugged_1, legend=false)
-    else
-        plot!(pp, df.datetime, (df.enerfrac_plugged .* df.vehicles_plugged + df.enerfrac_driving .* (vehicles .- df.vehicles_plugged)) / vehicles, seriestype=:line, label=enerfrac_plugged_1, legend=false)
-    end
-end
-
-pp
