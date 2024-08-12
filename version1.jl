@@ -153,3 +153,7 @@ dt0 = DateTime("2024-07-15T12:00:00")
 # 0.945021 seconds (14.10 M allocations: 393.177 MiB, 3.75% gc time)
 
 include("src/fullsim.jl")
+include("src/plotting.jl")
+
+df = simu_strat(dt0, strat, 4., 0.5, 0.5)
+plot_standard(df)

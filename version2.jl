@@ -153,34 +153,32 @@ end
 dt0 = DateTime("2023-07-15T12:00:00")
 vehicles_plugged_1 = 4.
 soc_plugged_1 = 0.5
+soc_driving_1 = 0.5
 
 probstate = zeros(SS-1, EE, FF, FF);
 df = simu_inactive(dt0, vehicles_plugged_1, soc_plugged_1, soc_driving_1)
-for ii in 1:nrow(df)
+for ii in 1:(nrow(df) - 1)
     statebase, stateceil1, probbase1, stateceil2, probbase2, stateceil3, probbase3 = breakstate((df.vehicles_plugged[ii], df.soc_plugged[ii], df.soc_driving[ii]))
-    probstate[statebase] = (probbase1 + probbase2 + probbase3) / 3
-    probstate[makeindex1.(state2base, state2ceil1)] = (1 .- probbase1) / 3
-    probstate[makeindex2.(state2base, state2ceil2)] = (1 .- probbase2) / 3
-    probstate[makeindex3.(state2base, state2ceil3)] = (1 .- probbase3) / 3
+    probstate[ii, statebase...] = (probbase1 + probbase2 + probbase3) / 3
+    probstate[ii, makeindex1(statebase, stateceil1)] += (1 - probbase1) / 3
+    probstate[ii, makeindex2(statebase, stateceil2)] += (1 - probbase2) / 3
+    probstate[ii, makeindex3(statebase, stateceil3)] += (1 - probbase3) / 3
 end
 
 probstate = probstate / 2 .+ repeat(ones(1, EE, FF, FF) / (EE * FF * FF), SS-1) / 2;
 
-mcdraws = 1
 strat, probfail, optregrange = optimize(dt0, probstate);
 df = simu_strat(dt0, strat, vehicles_plugged_1, soc_plugged_1, 0.)
 df[!, :optregrange] = optregrange
 pp = plot(df.datetime, (df.soc_plugged .* df.vehicles_plugged + df.soc_driving .* (vehicles .- df.vehicles_plugged)) / vehicles, seriestype=:line, label="")
 subdf = df[df.optregrange .> 0, :]
-plot!(pp, subdf.datetime, subdf.soc_plugged + subdf.optregrange / (vehicles * vehicle_capacity), seriestype=:point)
-plot!(pp, subdf.datetime, subdf.soc_plugged - subdf.optregrange / (vehicles * vehicle_capacity), seriestype=:point)
+plot!(pp, subdf.datetime, subdf.soc_plugged + subdf.optregrange / (vehicles * vehicle_capacity), seriestype=:line)
+plot!(pp, subdf.datetime, subdf.soc_plugged - subdf.optregrange / (vehicles * vehicle_capacity), seriestype=:line)
 pp
-
-mcdraws = 20
 
 dfall = nothing
 for ii in 1:mcdraws
-    df = simu_strat(dt0, strat, vehicles_plugged_1, soc_plugged_1, 0., true)
+    df = simu_strat(dt0, strat, vehicles_plugged_1, soc_plugged_1, 0., mcdraws > 1)
     energy = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) .* df.soc_above
     energy_minallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.3
     energy_maxallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.95
@@ -195,7 +193,7 @@ end
 
 probstate = zeros(SS-1, EE, FF, FF);
 for tt in 1:SS-1
-    dt1 = dt0 + periodstep(tt)
+    dt1 = dt0 + periodstep(tt - 1)
 
     for state in unique(dfall.state[dfall.datetime .== dt1])
         probstate[tt, state...] = sum(map(rowstate -> rowstate == state, dfall.state[dfall.datetime .== dt1])) / sum(dfall.datetime .== dt1)

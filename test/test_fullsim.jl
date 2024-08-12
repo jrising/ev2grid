@@ -3,10 +3,10 @@ using Plots
 
 SS = 36 # project for 1.5 days
 timestep = 1. # 1 hour
-include("utils.jl")
-include("simulate.jl")
+include("src/utils.jl")
+include("src/simulate.jl")
 include("src/customer.jl")
-include("fullsim.jl")
+include("src/fullsim.jl")
 
 dt0 = DateTime("2024-07-15T12:00:00")
 vehicles_plugged_1 = 4.

@@ -1,6 +1,6 @@
 using Dates, Plots, DataFrames
 
-include("utils.jl")
+include("src/utils.jl")
 include("src/customer.jl")
 
 df = DataFrame(dt=DateTime("2024-06-01T00:00:00"):Hour(1):DateTime("2024-06-03T00:00:00"))
@@ -10,8 +10,8 @@ pp = plot(df.dt, df.soc, seriestype=:steppost, label="")
 plot!(pp, size=(1000, 400))
 savefig("schedule.png")
 
-include("simulate.jl")
-include("fullsim.jl")
+include("src/simulate.jl")
+include("src/fullsim.jl")
 
 SS = nrow(df) - 1
 df2 = simu_inactive(df.dt[1] - periodstep(1), 4., 0.7, 0.7, false)
