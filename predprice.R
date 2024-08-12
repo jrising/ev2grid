@@ -18,6 +18,14 @@ for (year in year.min:(year.max-1))
 df$datetime <- parse_date_time(df$datetime_beginning_ept, "mdY HMS Op", tz="America/New_York")
 df$yyyymmdd <- format(df$datetime, "%Y%m%d")
 
+ggplot(df, aes(datetime, rmccp)) +
+    geom_line() + scale_x_datetime() + scale_y_log10()
+
+subdf <- subset(df, datetime >= as.POSIXct("2022-06-01") & datetime < as.POSIXct("2022-07-01"))
+ggplot(subdf, aes(datetime, rmccp)) +
+    geom_line() + scale_x_datetime(NULL, expand=c(0, 0)) +
+    scale_y_log10("Regulation Market Capability Clearing Price ($)", limits=c(0.1, max(subdf$rmccp))) + theme_bw()
+
 ## WILMINGTON NEW CASTLE CO AIRPORT, DE US
 ## https://www.ncei.noaa.gov/pub/data/ghcn/daily/by_station/USW00013781.csv.gz
 weather <- read.csv("USW00013781.csv", header=F, col.names=c('id', 'yyyymmdd', 'element', 'value', 'mf', 'qf', 'sf', 'time'))
@@ -57,12 +65,6 @@ df2 <- df %>% left_join(weather2) %>%
                                  TMAX1d=lag(TMAX, 1), TMAX2d=lag(TMAX, 2),
                                  TMIN1d=lag(TMIN, 1), TMIN2d=lag(TMIN, 2))
 df2$rmccp[df2$rmccp == 0] <- 0.004 # 0.01 is lowest otherwise
-
-ggplot(df2, aes(datetime, rmccp)) +
-    geom_line() + scale_x_datetime() + scale_y_log10()
-
-ggplot(df2, aes(datetime, rmccp)) +
-    geom_line() + scale_x_datetime(limits=as.POSIXct(c("2022-06-01", "2022-06-02"))) + scale_y_log10()
 
 summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d + yday.cos + yday.sin + hour.cos + hour.sin, data=df2))
 

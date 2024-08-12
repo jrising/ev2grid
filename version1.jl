@@ -13,13 +13,14 @@ using ArgCheck
 ## Construct below-split and perform simulation
 ## Transition to state2 at end of timestep
 
-include("utils.jl")
+include("src/bizutils.jl")
 include("src/customer.jl")
-include("simulate.jl")
+include("src/simulate.jl")
 include("src/retail.jl")
 
 # General configuration
 
+timestep = 1. # 1 hour
 SS = 36 # project for 1.5 days
 # Noon to following midnight
 mcdraws = 1 # 1 for deterministic
@@ -38,14 +39,8 @@ efficiency = 0.95 # EFF
 EE = 5 # 0 - 4 cars
 FF = 11 # For both enerfrac_plugged and enerfrac_driving, 0 - 1
 
-## Unexpected changes in vehicles
-prob_event = 0.01 # per hour, so 1 per 4 days
-prob_event_vehicles = [0.5, .25, .125, .125]
-prob_event_return = 0.25
-prob_delayed_return = 0.1
-
-include("value.jl")
-include("optutils.jl")
+include("src/value.jl")
+include("src/optutils.jl")
 
 ## Checks on configuration parameters
 
@@ -125,9 +120,12 @@ function optimize(dt0::DateTime, SS::Int)
             else
                 simustep = get_simustep_stochastic(dt1)
             end
-            state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 =
-                simustate2(simustep, vehicles_plugged_range, vehicle_split, ff12_byaction, enerfrac1_byaction, enerfrac_range)
-            VV1byactthismc = calcVV1byact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3)
+            # Note: We impose costs from enerfrac-below vehicles, but do not adjust state because it pushes up plugged-in enerfrac every period
+            statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]), enerfrac1_byaction[pp, ee, ff1, ff2], enerfrac_range[ff2]), vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+
+            state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2)
+
+            VV1byactthismc = combinebyact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3)
             VV1byactsummc += VV1byactthismc;
         end
 
@@ -154,4 +152,4 @@ dt0 = DateTime("2024-07-15T12:00:00")
 
 # 0.945021 seconds (14.10 M allocations: 393.177 MiB, 3.75% gc time)
 
-include("fullsim.jl")
+include("src/fullsim.jl")

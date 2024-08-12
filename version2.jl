@@ -104,17 +104,19 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 4})
                 else
                     simustep = get_simustep_stochastic(dt1)
                 end
-                state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 =
-                    simustate2(simustep, vehicles_plugged_range, vehicle_split, ff12_byaction, enerfrac1_byaction, enerfrac_range);
-                VV1byactthismc = calcVV1byact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
+                # Note: We impose costs from enerfrac-below vehicles, but do not adjust state because it pushes up plugged-in enerfrac every period
+                statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]), enerfrac1_byaction[pp, ee, ff1, ff2], enerfrac_range[ff2]), vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+
+                state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2)
+                VV1byactthismc = combinebyact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
                 VV1byactsummc += VV1byactthismc;
 
                 if regrange > 0
                     ## Calculate probability of falling outside of allowed range
-                    probfailthismc = calcVV1byact(probfail .+ regrange_fail_bystate, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3) .+ regrange_fail_byact .+ (1 .- regrange_good_byact);
+                    probfailthismc = combinebyact(probfail .+ regrange_fail_bystate, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3) .+ regrange_fail_byact .+ (1 .- regrange_good_byact);
                 else
                     # no additional probfail
-                    probfailthismc = calcVV1byact(probfail, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
+                    probfailthismc = combinebyact(probfail, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
                 end
 
                 probfailsummc += probfailthismc
@@ -199,8 +201,3 @@ for tt in 1:SS-1
         probstate[tt, state...] = sum(map(rowstate -> rowstate == state, dfall.state[dfall.datetime .== dt1])) / sum(dfall.datetime .== dt1)
     end
 end
-
-## TODO: Iterate with new optimize until converges
-## TODO: Calculate available regrange under probfail_limit
-dfall %>% group_by(datetime) %>% summarize(regrange=quantile(regrange, 1 - probfail_limit))
-## TODO: Use predprice with bootstraps to identify real value
