@@ -1,4 +1,4 @@
-## These functions assume the existence of global variables vehicles, EE, enerfrac_min, enerfrac_max, FF
+## These functions assume the existence of global variables vehicles, EE, soc_min, soc_max, FF
 
 """
 Translate a continuous value to a discrete state.
@@ -69,7 +69,7 @@ Returns:
 - Tuple of discrete states for each element in the input tuple.
 """
 function asstate_float(tup::Tuple{Float64, Float64, Float64})
-    (discrete_float(tup[1], 0., vehicles, EE), discrete_floatbelow(tup[2], enerfrac_min, enerfrac_max, FF), discrete_floatbelow(tup[3], enerfrac_min, enerfrac_max, FF))
+    (discrete_float(tup[1], 0., vehicles, EE), discrete_floatbelow(tup[2], soc_min, soc_max, FF), discrete_floatbelow(tup[3], soc_min, soc_max, FF))
 end
 
 """

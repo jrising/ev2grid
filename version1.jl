@@ -33,11 +33,11 @@ efficiency = 0.95 # EFF
 
 # States
 #   vehicles_plugged: The number of plugged in cars
-#   enerfrac_plugged: The fraction of energy available for plugged-in cars
-#   enerfrac_driving: The fraction of energy available for driving cars
+#   soc_plugged: The fraction of energy available for plugged-in cars
+#   soc_driving: The fraction of energy available for driving cars
 # Number of states for each dimension:
 EE = 5 # 0 - 4 cars
-FF = 11 # For both enerfrac_plugged and enerfrac_driving, 0 - 1
+FF = 11 # For both soc_plugged and soc_driving, 0 - 1
 
 include("src/value.jl")
 include("src/optutils.jl")
@@ -49,13 +49,13 @@ include("src/optutils.jl")
 """
 Return matrix of changes in energy, across actions.
 """
-function make_actions(enerfrac0::Float64)
+function make_actions(soc0::Float64)
     fracpower = range(fracpower_min, fracpower_max, length=PP)
 
-    denerfracs = timestep * fracpower
-    enerfrac1s = max.(0., min.(1., enerfrac0 .+ denerfracs))
+    dsocs = timestep * fracpower
+    soc1s = max.(0., min.(1., soc0 .+ dsocs))
 
-    [0; enerfrac1s .- enerfrac0]
+    [0; soc1s .- soc0]
 end
 
 ## make_actions(0.5)
@@ -74,20 +74,20 @@ function optimize(dt0::DateTime, SS::Int)
     strat = zeros(Int64, SS-1, EE, FF, FF);
 
     # Construct dimensions
-    enerfrac_range = [0.; range(enerfrac_min, enerfrac_max, FF-1)];
+    soc_range = [0.; range(soc_min, soc_max, FF-1)];
     vehicles_plugged_range = collect(range(0., vehicles, EE));
 
     # Construct exogenous change levels
-    denerfrac_FF = [make_actions(enerfrac_plugged) for enerfrac_plugged=enerfrac_range];
-    denerfrac = [denerfrac_FF[ff][pp] for pp=1:PP, vehicles_plugged=vehicles_plugged_range, ff=1:FF, enerfrac_driving=enerfrac_range];
+    dsoc_FF = [make_actions(soc_plugged) for soc_plugged=soc_range];
+    dsoc = [dsoc_FF[ff][pp] for pp=1:PP, vehicles_plugged=vehicles_plugged_range, ff=1:FF, soc_driving=soc_range];
 
-    enerfrac0_byaction = repeat(reshape(enerfrac_range, 1, 1, FF, 1), PP, EE, 1, FF);
+    soc0_byaction = repeat(reshape(soc_range, 1, 1, FF, 1), PP, EE, 1, FF);
 
     # STEP 1: Calculate V[S] under every scenario
-    enerfrac_needed = enerfrac_scheduled(dt0 + periodstep(SS))
-    vehicle_split = split_below.(enerfrac_range, enerfrac_needed)
-    value_energy_byenerfrac = [value_energy(vehicle_split[ff][1], vehicle_split[ff][3], enerfrac_needed) for ff=1:FF]
-    VV2 = repeat(reshape(value_energy_byenerfrac, 1, FF), EE, 1, FF)
+    soc_needed = soc_scheduled(dt0 + periodstep(SS))
+    vehicle_split = split_below.(soc_range, soc_needed)
+    value_energy_bysoc = [value_energy(vehicle_split[ff][1], vehicle_split[ff][3], soc_needed) for ff=1:FF]
+    VV2 = repeat(reshape(value_energy_bysoc, 1, FF), EE, 1, FF)
 
     # STEP 2: Determine optimal action for t = S-1 and back
     for tt in (SS-1):-1:1
@@ -97,18 +97,18 @@ function optimize(dt0::DateTime, SS::Int)
         #     break
         # end
 
-        enerfrac1_byaction = enerfrac0_byaction .+ denerfrac;
+        soc1_byaction = soc0_byaction .+ dsoc;
 
         dt1 = dt0 + periodstep(tt)
         price = get_retail_price(dt1)
-        valuep = value_power_action.(price, denerfrac);
+        valuep = value_power_action.(price, dsoc);
 
-        enerfrac_needed = enerfrac_scheduled(dt1)
-        vehicle_split = split_below.(enerfrac_range, enerfrac_needed)
-        valuepns = [value_power_newstate.(price, vehicle_split[ff12][1], enerfrac_needed - vehicle_split[ff12][2]) for ff12 in 1:FF]
-        valuee = [value_energy.(vehicle_split[ff12][1], vehicle_split[ff12][3], enerfrac_needed) for ff12 in 1:FF];
+        soc_needed = soc_scheduled(dt1)
+        vehicle_split = split_below.(soc_range, soc_needed)
+        valuepns = [value_power_newstate.(price, vehicle_split[ff12][1], soc_needed - vehicle_split[ff12][2]) for ff12 in 1:FF]
+        valuee = [value_energy.(vehicle_split[ff12][1], vehicle_split[ff12][3], soc_needed) for ff12 in 1:FF];
 
-        ff12_byaction = discrete_roundbelow.(enerfrac1_byaction, enerfrac_min, enerfrac_max, FF);
+        ff12_byaction = discrete_roundbelow.(soc1_byaction, soc_min, soc_max, FF);
         valuepns_byaction = valuepns[ff12_byaction];
         valuee_byaction = valuee[ff12_byaction];
 
@@ -120,8 +120,8 @@ function optimize(dt0::DateTime, SS::Int)
             else
                 simustep = get_simustep_stochastic(dt1)
             end
-            # Note: We impose costs from enerfrac-below vehicles, but do not adjust state because it pushes up plugged-in enerfrac every period
-            statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]), enerfrac1_byaction[pp, ee, ff1, ff2], enerfrac_range[ff2]), vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+            # Note: We impose costs from soc-below vehicles, but do not adjust state because it pushes up plugged-in soc every period
+            statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]), soc1_byaction[pp, ee, ff1, ff2], soc_range[ff2]), vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
             state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2)
 

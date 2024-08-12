@@ -15,19 +15,19 @@ vehicle_capacity = 75.7
 driving_energy_perhour = 329 * 42 / 8 / 1e3 # Wh/mile * miles/day * day/8 hr
 
 # Fraction of energy required at all times
-enerfrac_min = 0.3
+soc_min = 0.3
 
 # Maximum fraction of energy allowed
-enerfrac_max = 1.0
+soc_max = 1.0
 
 # Total energy requirement at 9am in kWh
 energy_9am = vehicles * 329 * 42 / 1e3 + 0.3 * vehicle_capacity * vehicles # Requirement at 9am: Wh/mile * miles/day
 # Fraction of energy required at 9am relative to total capacity
-enerfrac_9am = energy_9am / (vehicle_capacity * vehicles)
+soc_9am = energy_9am / (vehicle_capacity * vehicles)
 
 
 """
-    enerfrac_scheduled(dt::DateTime) -> Float64
+    soc_scheduled(dt::DateTime) -> Float64
 
 Calculate the energy fraction required at any given future time based on a schedule,
 ignoring unscheduled activity.
@@ -38,14 +38,14 @@ ignoring unscheduled activity.
 # Returns
 - `Float64`: The fraction of energy required.
 """
-function enerfrac_scheduled(dt::DateTime)
+function soc_scheduled(dt::DateTime)
     date_part = Dates.Date(dt)
     dt_9am = DateTime(date_part, Dates.Time(9, 0, 0))
 
     if dt_9am - periodstep(1) ≤ dt < dt_9am
-        return enerfrac_9am
+        return soc_9am
     else
-        return enerfrac_min
+        return soc_min
     end
 end
 

@@ -43,15 +43,15 @@ function run_tests()
         vehicles_below = 2.0
 
         # Test with valid input
-        vehicles_plugged, enerfrac_plugged, _ = adjust_below(tup, 0.3, vehicles_below)
+        vehicles_plugged, soc_plugged, _ = adjust_below(tup, 0.3, vehicles_below)
         @test vehicles_plugged ≈ 4.0
-        @test enerfrac_plugged ≈ 0.3
+        @test soc_plugged ≈ 0.3
 
         # Test when no vehicles are below
         tup = (2.0, 0.7, 0.5)
         vehicles_below = 0.0
-        vehicles_plugged, enerfrac_plugged, _ = adjust_below(tup, 0.3, vehicles_below)
+        vehicles_plugged, soc_plugged, _ = adjust_below(tup, 0.3, vehicles_below)
         @test vehicles_plugged ≈ 2.0       # Remains the same
-        @test enerfrac_plugged ≈ 0.7       # Remains the same
+        @test soc_plugged ≈ 0.7       # Remains the same
     end
 end

@@ -60,10 +60,10 @@ function optimize(dt0::DateTime, SS::Int)
     strat = zeros(Int64, SS-1, EE)
 
     # STEP 1: Calculate V[S] under every scenario
-    VV2 = repeat(value.(dt0 + periodstep(SS), range(enerfrac_min, enerfrac_max, length=EE)), 1, FF, FF)
+    VV2 = repeat(value.(dt0 + periodstep(SS), range(soc_min, soc_max, length=EE)), 1, FF, FF)
 
     # STEP 2: Determine optimal action for t = S-1 and back
-        [make_action_Fplugged(enerfrac_plugged) for enerfrac_plugged=range(0., 1., FF), enerfrac_driving=range(0., 1., FF), vehicles_plugged=range(0., vehicles, EE)]
+        [make_action_Fplugged(soc_plugged) for soc_plugged=range(0., 1., FF), soc_driving=range(0., 1., FF), vehicles_plugged=range(0., vehicles, EE)]
 
     for tt in (SS-1):-1:1
         println(tt)
@@ -101,13 +101,13 @@ end
 """
 Return matrix of changes in energy, across actions.
 """
-function make_action_Fplugged(enerfrac0::Float64)
+function make_action_Fplugged(soc0::Float64)
     fracpower = range(fracpower_min, fracpower_max, length=PP)
 
-    denerfracs = timestep * fracpower
-    enerfrac1s = max.(0., min.(1., enerfrac0 .+ denerfracs))
+    dsocs = timestep * fracpower
+    soc1s = max.(0., min.(1., soc0 .+ dsocs))
 
-    [0; enerfrac1s .- enerfrac0]
+    [0; soc1s .- soc0]
 end
 
 ## make_action_Fplugged(0.5)

@@ -4,9 +4,9 @@ include("utils.jl")
 include("src/customer.jl")
 
 df = DataFrame(dt=DateTime("2024-06-01T00:00:00"):Hour(1):DateTime("2024-06-03T00:00:00"))
-df[!, :enerfrac] = enerfrac_scheduled.(df.dt)
+df[!, :soc] = soc_scheduled.(df.dt)
 
-pp = plot(df.dt, df.enerfrac, seriestype=:steppost, label="")
+pp = plot(df.dt, df.soc, seriestype=:steppost, label="")
 plot!(pp, size=(1000, 400))
 savefig("schedule.png")
 
@@ -17,8 +17,8 @@ SS = nrow(df) - 1
 df2 = simu_inactive(df.dt[1] - periodstep(1), 4., 0.7, 0.7, false)
 
 pp = plot(df2.datetime, df2.vehicles_plugged / 4, seriestype=:steppost, label="Vehicles Plugged-In")
-plot!(pp, df2.datetime, df2.enerfrac_needed, seriestype=:steppost, label="Energy Needed")
-plot!(pp, df2.datetime, (df2.enerfrac_plugged .* df2.vehicles_plugged .+ df2.enerfrac_driving .* (vehicles .- df2.vehicles_plugged)) / vehicles, seriestype=:steppost, label="Energy of Plugged-In")
+plot!(pp, df2.datetime, df2.soc_needed, seriestype=:steppost, label="Energy Needed")
+plot!(pp, df2.datetime, (df2.soc_plugged .* df2.vehicles_plugged .+ df2.soc_driving .* (vehicles .- df2.vehicles_plugged)) / vehicles, seriestype=:steppost, label="Energy of Plugged-In")
 plot!(pp, size=(1000, 400))
 savefig("schedule.png")
 
