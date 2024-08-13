@@ -59,23 +59,27 @@ Simulates the energy fraction of vehicles while applying a given strategy over s
 function simu_strat(dt0::DateTime, strat::AbstractArray{Int}, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, stochastic::Bool=false)
     rows = Tuple{DateTime, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Union{Missing, Float64}, Union{Missing, Tuple{Int, Int, Int}}}[]
 
-    soc_needed = soc_scheduled(dt0 + periodstep(1))
+    soc_needed = soc_scheduled(dt0 + periodstep(tt))
     vehicle_split = split_below(soc_plugged_1, soc_needed)
 
-    push!(rows, (dt0, soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, missing, missing))
-
     for tt in 1:(size(strat)[1]-1)
+        # Determine action for this period
         dsoc = make_actions(soc_plugged_1)
 
         statebase, stateceil1, probbase1, stateceil2, probbase2, stateceil3, probbase3 = breakstate((vehicles_plugged_1, soc_plugged_1, soc_driving_1))
+
         ppbase = strat[tt, statebase...]
         ppceil1 = strat[tt, makeindex1(statebase, stateceil1)]
         ppceil2 = strat[tt, makeindex2(statebase, stateceil2)]
         ppceil3 = strat[tt, makeindex3(statebase, stateceil3)]
         dsoc_pp = ((probbase1 + probbase2 + probbase3) .* dsoc[ppbase] + (1 .- probbase1) .* dsoc[ppceil1] + (1 .- probbase2) .* dsoc[ppceil2] + (1 .- probbase3) .* dsoc[ppceil3]) / 3;
 
+        push!(rows, (dt0 + periodstep(tt - 1), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, dsoc_pp, statebase))
+
+        ## Apply action
         soc_plugged_2 = soc_plugged_1 + dsoc_pp
 
+        ## Apply simulation
         soc_needed = soc_scheduled(dt0 + periodstep(tt))
         vehicle_split = split_below(soc_plugged_2, soc_needed)
 
@@ -85,9 +89,10 @@ function simu_strat(dt0::DateTime, strat::AbstractArray{Int}, vehicles_plugged_1
             simustep = get_simustep_deterministic(dt0 + periodstep(tt))
         end
         vehicles_plugged_2, soc_plugged_2, soc_driving_2 = adjust_below(simustep(vehicles_plugged_1, vehicles_plugged_1 * (1. - vehicle_split[1]), vehicle_split[3], soc_driving_1), vehicle_split[2], vehicles_plugged_1 * vehicle_split[1])
-        push!(rows, (dt0 + periodstep(tt), soc_needed, vehicles_plugged_2, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_2, soc_driving_2, dsoc_pp, statebase))
         vehicles_plugged_1, soc_plugged_1, soc_driving_1 = vehicles_plugged_2, soc_plugged_2, soc_driving_2
     end
+
+    push!(rows, (dt0 + periodstep(size(strat)[1]), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, missing, missing))
 
     df = DataFrame(rows)
     rename!(df, [:datetime, :soc_needed, :vehicles_plugged, :portion_below, :soc_below, :soc_above, :soc_plugged, :soc_driving, :dsoc, :state])

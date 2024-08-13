@@ -167,35 +167,40 @@ end
 
 probstate = probstate / 2 .+ repeat(ones(1, EE, FF, FF) / (EE * FF * FF), SS-1) / 2;
 
-strat, probfail, optregrange = optimize(dt0, probstate);
+for ll in 1:10
+    println("Loop $(ll)")
+    strat, probfail, optregrange = optimize(dt0, probstate);
+
+    dfall = nothing
+    for ii in 1:mcdraws
+        df = simu_strat(dt0, strat, vehicles_plugged_1, soc_plugged_1, 0., mcdraws > 1)
+        energy = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) .* df.soc_above
+        energy_minallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.3
+        energy_maxallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.95
+        df[!, :regrange_avail] = min.(energy_maxallow - energy, energy - energy_minallow)
+
+        if dfall == nothing
+            dfall = df
+        else
+            append!(dfall, df)
+        end
+    end
+
+    probstate = zeros(SS-1, EE, FF, FF);
+    for tt in 1:SS-1
+        dt1 = dt0 + periodstep(tt - 1)
+
+        for state in unique(dfall.state[dfall.datetime .== dt1])
+            probstate[tt, state...] = sum(map(rowstate -> rowstate == state, dfall.state[dfall.datetime .== dt1])) / sum(dfall.datetime .== dt1)
+        end
+    end
+    probstate[SS-1, :, :, :] = ones(EE, FF, FF) / (EE * FF * FF)
+end
+
 df = simu_strat(dt0, strat, vehicles_plugged_1, soc_plugged_1, 0.)
 df[!, :optregrange] = optregrange
-pp = plot(df.datetime, (df.soc_plugged .* df.vehicles_plugged + df.soc_driving .* (vehicles .- df.vehicles_plugged)) / vehicles, seriestype=:line, label="")
-subdf = df[df.optregrange .> 0, :]
-plot!(pp, subdf.datetime, subdf.soc_plugged + subdf.optregrange / (vehicles * vehicle_capacity), seriestype=:line)
-plot!(pp, subdf.datetime, subdf.soc_plugged - subdf.optregrange / (vehicles * vehicle_capacity), seriestype=:line)
+pp = plot_standard(df)
+# df.optregrange[df.optregrange .== 0.] .= NaN
+plot!(pp, df.datetime, df.soc_plugged + df.optregrange / (vehicles * vehicle_capacity), seriestype=:line, label="Reg. Range High")
+plot!(pp, df.datetime, df.soc_plugged - df.optregrange / (vehicles * vehicle_capacity), seriestype=:line, label="Reg. Range Low")
 pp
-
-dfall = nothing
-for ii in 1:mcdraws
-    df = simu_strat(dt0, strat, vehicles_plugged_1, soc_plugged_1, 0., mcdraws > 1)
-    energy = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) .* df.soc_above
-    energy_minallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.3
-    energy_maxallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.95
-    df[!, :regrange_avail] = min.(energy_maxallow - energy, energy - energy_minallow)
-
-    if dfall == nothing
-        dfall = df
-    else
-        append!(dfall, df)
-    end
-end
-
-probstate = zeros(SS-1, EE, FF, FF);
-for tt in 1:SS-1
-    dt1 = dt0 + periodstep(tt - 1)
-
-    for state in unique(dfall.state[dfall.datetime .== dt1])
-        probstate[tt, state...] = sum(map(rowstate -> rowstate == state, dfall.state[dfall.datetime .== dt1])) / sum(dfall.datetime .== dt1)
-    end
-end
