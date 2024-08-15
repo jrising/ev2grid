@@ -154,9 +154,10 @@ dt0 = DateTime("2023-07-15T12:00:00")
 vehicles_plugged_1 = 4.
 soc_plugged_1 = 0.5
 soc_driving_1 = 0.5
+mcdraws = 1
 
 probstate = zeros(SS-1, EE, FF, FF);
-df = simu_inactive(dt0, vehicles_plugged_1, soc_plugged_1, soc_driving_1)
+df = fullsimulate(dt0, zeros(SS-1), vehicles_plugged_1, soc_plugged_1, soc_driving_1)
 for ii in 1:(nrow(df) - 1)
     statebase, stateceil1, probbase1, stateceil2, probbase2, stateceil3, probbase3 = breakstate((df.vehicles_plugged[ii], df.soc_plugged[ii], df.soc_driving[ii]))
     probstate[ii, statebase...] = (probbase1 + probbase2 + probbase3) / 3
@@ -173,7 +174,7 @@ for ll in 1:10
 
     dfall = nothing
     for ii in 1:mcdraws
-        df = simu_strat(dt0, strat, vehicles_plugged_1, soc_plugged_1, 0., mcdraws > 1)
+        df = fullsimulate(dt0, strat, vehicles_plugged_1, soc_plugged_1, 0., mcdraws > 1)
         energy = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) .* df.soc_above
         energy_minallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.3
         energy_maxallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.95
@@ -197,10 +198,12 @@ for ll in 1:10
     probstate[SS-1, :, :, :] = ones(EE, FF, FF) / (EE * FF * FF)
 end
 
-df = simu_strat(dt0, strat, vehicles_plugged_1, soc_plugged_1, 0.)
+strat, probfail, optregrange = optimize(dt0, probstate);
+
+df = fullsimulate(dt0, strat, optregrange, vehicles_plugged_1, soc_plugged_1, 0.)
 df[!, :optregrange] = optregrange
+
 pp = plot_standard(df)
-# df.optregrange[df.optregrange .== 0.] .= NaN
-plot!(pp, df.datetime, df.soc_plugged + df.optregrange / (vehicles * vehicle_capacity), seriestype=:line, label="Reg. Range High")
-plot!(pp, df.datetime, df.soc_plugged - df.optregrange / (vehicles * vehicle_capacity), seriestype=:line, label="Reg. Range Low")
-pp
+plot!(pp, df.datetime, df.soc_plugged, ribbon=df.optregrange / (vehicles * vehicle_capacity), label="Reg. Range")
+plot!(size=(700,400))
+savefig("optregrange.pdf")

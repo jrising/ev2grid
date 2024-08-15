@@ -14,7 +14,7 @@ include("src/simulate.jl")
 include("src/fullsim.jl")
 
 SS = nrow(df) - 1
-df2 = simu_inactive(df.dt[1] - periodstep(1), 4., 0.7, 0.7, false)
+df2 = fullsimulate(df.dt[1] - periodstep(1), zeros(SS-1), 4., 0.7, 0.7, false)
 
 pp = plot(df2.datetime, df2.vehicles_plugged / 4, seriestype=:steppost, label="Vehicles Plugged-In")
 plot!(pp, df2.datetime, df2.soc_needed, seriestype=:steppost, label="Energy Needed")
@@ -33,7 +33,7 @@ prob_delayed_return = 0.1
 pp = plot(baseline.datetime, baseline.vehicles_plugged / 4, seriestype=:steppost, label="Vehicles Plugged-In")
 
 for mc in 1:100
-    df2 = simu_inactive(df.dt[1] - periodstep(1), 4., 0.7, 0.7, true)
+    df2 = fullsimulate(df.dt[1] - periodstep(1), zeros(SS-1), 4., 0.7, 0.7, true)
     if all(df2.vehicles_plugged .== baseline.vehicles_plugged)
         continue
     end

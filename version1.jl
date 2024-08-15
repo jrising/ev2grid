@@ -147,7 +147,7 @@ function optimize(dt0::DateTime, SS::Int)
     return strat
 end
 
-dt0 = DateTime("2024-07-15T12:00:00")
+dt0 = DateTime("2023-07-15T12:00:00")
 @time strat = optimize(dt0, SS);
 
 # 0.945021 seconds (14.10 M allocations: 393.177 MiB, 3.75% gc time)
@@ -155,5 +155,5 @@ dt0 = DateTime("2024-07-15T12:00:00")
 include("src/fullsim.jl")
 include("src/plotting.jl")
 
-df = simu_strat(dt0, strat, 4., 0.5, 0.5)
+df = fullsimulate(dt0, strat, zeros(SS-1), 4., 0.5, 0.5)
 plot_standard(df)

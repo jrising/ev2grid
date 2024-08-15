@@ -12,7 +12,7 @@ dt0 = DateTime("2024-07-15T12:00:00")
 vehicles_plugged_1 = 4.
 soc_plugged_1 = 0.5
 soc_driving_1 = 0.5
-df = simu_inactive(dt0, vehicles_plugged_1, soc_plugged_1, soc_driving_1)
+df = fullsimulate(dt0, zeros(SS-1), vehicles_plugged_1, soc_plugged_1, soc_driving_1)
 
 pp = plot(df.datetime, (df.soc_plugged .* df.vehicles_plugged + df.soc_driving .* (vehicles .- df.vehicles_plugged)) / vehicles, seriestype=:line, label="")
 
@@ -23,7 +23,7 @@ vehicles_plugged_1 = 4.
 pp = nothing
 for soc_plugged_1 in range(soc_min, soc_max, FF-1)
     local soc_driving_1 = soc_plugged_1
-    local df = simu_strat(dt0, strat, vehicles_plugged_1, soc_plugged_1, soc_driving_1)
+    local df = fullsimulate(dt0, strat, vehicles_plugged_1, soc_plugged_1, soc_driving_1)
     global pp
 
     if pp == nothing
