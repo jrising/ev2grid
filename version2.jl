@@ -113,7 +113,7 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 4})
 
                 if regrange > 0
                     ## Calculate probability of falling outside of allowed range
-                    probfailthismc = combinebyact(probfail .+ regrange_fail_bystate, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3) .+ regrange_fail_byact .+ (1 .- regrange_good_byact);
+                    probfailthismc = combinebyact(probfail .+ regrange_fail_bystate, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3) .+ (1 .- regrange_good_byact);
                 else
                     # no additional probfail
                     probfailthismc = combinebyact(probfail, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
@@ -174,7 +174,7 @@ for ll in 1:10
 
     dfall = nothing
     for ii in 1:mcdraws
-        df = fullsimulate(dt0, strat, vehicles_plugged_1, soc_plugged_1, 0., mcdraws > 1)
+        df = fullsimulate(dt0, strat, optregrange, vehicles_plugged_1, soc_plugged_1, 0., mcdraws > 1)
         energy = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) .* df.soc_above
         energy_minallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.3
         energy_maxallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.95
@@ -195,13 +195,12 @@ for ll in 1:10
             probstate[tt, state...] = sum(map(rowstate -> rowstate == state, dfall.state[dfall.datetime .== dt1])) / sum(dfall.datetime .== dt1)
         end
     end
-    probstate[SS-1, :, :, :] = ones(EE, FF, FF) / (EE * FF * FF)
 end
 
 strat, probfail, optregrange = optimize(dt0, probstate);
 
 df = fullsimulate(dt0, strat, optregrange, vehicles_plugged_1, soc_plugged_1, 0.)
-df[!, :optregrange] = optregrange
+df[!, :optregrange] = [0.; optregrange]
 
 pp = plot_standard(df)
 plot!(pp, df.datetime, df.soc_plugged, ribbon=df.optregrange / (vehicles * vehicle_capacity), label="Reg. Range")
