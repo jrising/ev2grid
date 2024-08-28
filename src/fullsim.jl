@@ -52,7 +52,7 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
         vehicles_plugged_1, soc_plugged_1, soc_driving_1 = vehicles_plugged_2, soc_plugged_2, soc_driving_2
     end
 
-    push!(rows, (dt0 + periodstep(size(strat)[1]), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, missing, missing, 0., 0., 0., 0.))
+    push!(rows, (dt0 + periodstep(SS-1), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, missing, missing, 0., 0., 0., 0.))
 
     df = DataFrame(rows)
     rename!(df, [:datetime, :soc_needed, :vehicles_plugged, :portion_below, :soc_below, :soc_above, :soc_plugged, :soc_driving, :dsoc, :state, :valuep, :valuepns, :valuee, :valuer])

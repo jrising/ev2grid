@@ -1,5 +1,9 @@
+using CSV, DataFrames
+
 hourly_valuee = .1
 
+pricedf = CSV.read("predprice.csv", DataFrame)
+pricedf[!, :datetime] = DateTime.(replace.(pricedf.datetime, " " => "T"))
 
 """
 Calculates the value of having energy at a certain level. The function considers the proportion of energy below

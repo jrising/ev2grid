@@ -9,6 +9,8 @@ library(FNN)
 library(reshape2)
 source("~/projects/research-common/R/felm-tools.R")
 
+do.preanalysis <- F
+
 year.min <- 2018
 year.max <- 2024
 
@@ -18,13 +20,33 @@ for (year in year.min:(year.max-1))
 df$datetime <- parse_date_time(df$datetime_beginning_ept, "mdY HMS Op", tz="America/New_York")
 df$yyyymmdd <- format(df$datetime, "%Y%m%d")
 
-ggplot(df, aes(datetime, rmccp)) +
-    geom_line() + scale_x_datetime() + scale_y_log10()
+if (do.preanalysis) {
+    ggplot(df, aes(datetime, rmccp)) +
+        geom_line() + scale_x_datetime(NULL, expand=c(0, 0)) +
+        scale_y_log10("Regulation Market Capability Clearing Price ($)") + theme_bw()
 
-subdf <- subset(df, datetime >= as.POSIXct("2022-06-01") & datetime < as.POSIXct("2022-07-01"))
-ggplot(subdf, aes(datetime, rmccp)) +
-    geom_line() + scale_x_datetime(NULL, expand=c(0, 0)) +
-    scale_y_log10("Regulation Market Capability Clearing Price ($)", limits=c(0.1, max(subdf$rmccp))) + theme_bw()
+    subdf <- subset(df, datetime >= as.POSIXct("2022-06-01") & datetime < as.POSIXct("2022-07-01"))
+    ggplot(subdf, aes(datetime, rmccp)) +
+        geom_line() + scale_x_datetime(NULL, expand=c(0, 0)) +
+        scale_y_log10("Regulation Market Capability Clearing Price ($)", limits=c(0.1, max(subdf$rmccp))) + theme_bw()
+}
+
+if (do.preanalysis) {
+    library(WaveletComp)
+
+    df$date <- as.POSIXct(df$datetime)
+    my.w <- analyze.wavelet(df %>% arrange(date), "rmccp",
+                            loess.span=0,
+                            dt=1 / 24, dj=1/20,
+                            lowerPeriod=2^3,
+                            upperPeriod=2^9, # > 365,
+                            make.pval=TRUE, n.sim=10)
+    wt.image(my.w, color.key="quantile", n.levels=250,
+             legend.params=list(lab="wavelet power levels", mar=4.7,
+                                label.digits=2),
+             periodlab="period (days)",
+             show.date = TRUE, date.format = "%F %T")
+}
 
 ## WILMINGTON NEW CASTLE CO AIRPORT, DE US
 ## https://www.ncei.noaa.gov/pub/data/ghcn/daily/by_station/USW00013781.csv.gz
@@ -66,13 +88,15 @@ df2 <- df %>% left_join(weather2) %>%
                                  TMIN1d=lag(TMIN, 1), TMIN2d=lag(TMIN, 2))
 df2$rmccp[df2$rmccp == 0] <- 0.004 # 0.01 is lowest otherwise
 
-summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d + yday.cos + yday.sin + hour.cos + hour.sin, data=df2))
+if (do.preanalysis) {
+    summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d + yday.cos + yday.sin + hour.cos + hour.sin, data=df2))
 
-summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d | factor(yday) + factor(hour), data=df2))
+    summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d | factor(yday) + factor(hour), data=df2))
 
-summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag2 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d | factor(yday) + factor(hour), data=df2))
+    summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag2 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d | factor(yday) + factor(hour), data=df2))
 
-summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag2 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d + pcplag2d + pcplag3d + pcplag4d + pcplag5d + pcplag6d + pcplag7d + rtlag2d + loclag2d + rplag2d + ssrlag2d + arlag2d + crlag2d + pcpcrlag2d + TMAX + TMAX1d | factor(yday) + factor(hour), data=df2))
+    summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag2 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d + pcplag2d + pcplag3d + pcplag4d + pcplag5d + pcplag6d + pcplag7d + rtlag2d + loclag2d + rplag2d + ssrlag2d + arlag2d + crlag2d + pcpcrlag2d + TMAX + TMAX1d | factor(yday) + factor(hour), data=df2))
+}
 
 df2$set <- rep(rep(1:4, each=24), ceiling(nrow(df2) / 96))[1:nrow(df2)]
 
@@ -98,9 +122,11 @@ est.knn <- function(df2, covars, knum) {
 
 df2$holiday.f <- as.numeric(df2$holiday)
 
-df2$knn <- est.knn(df2, c('holiday.f', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'yday.cos', 'yday.sin', 'hour.cos', 'hour.sin', 'weekday', 'TMAX2d', 'TMIN2d', 'PRCP2d'), 5)
+if (do.preanalysis) {
+    df2$knn <- est.knn(df2, c('holiday.f', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'yday.cos', 'yday.sin', 'hour.cos', 'hour.sin', 'weekday', 'TMAX2d', 'TMIN2d', 'PRCP2d'), 5)
 
-summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag2 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d + pcplag2d + pcplag3d + pcplag4d + pcplag5d + pcplag6d + pcplag7d + rtlag2d + loclag2d + rplag2d + ssrlag2d + arlag2d + crlag2d + pcpcrlag2d + TMAX1d + knn | factor(yday) + factor(hour), data=df2))
+    summary(felm(log(rmccp) ~ datetime + holiday + weekday + lag1 + lag2 + lag1d + lag2d + lag3d + lag4d + lag5d + lag6d + lag7d + pcplag2d + pcplag3d + pcplag4d + pcplag5d + pcplag6d + pcplag7d + rtlag2d + loclag2d + rplag2d + ssrlag2d + arlag2d + crlag2d + pcpcrlag2d + TMAX1d + knn | factor(yday) + factor(hour), data=df2))
+}
 
 project.48.felm <- function(df2, covars) {
     felm(as.formula(paste("log(rmccp) ~", paste(covars, collapse=" + "), "| factor(yday) + factor(hour) + factor(weekday)")), data=df2)
@@ -173,11 +199,15 @@ project.48 <- function(df2, covars, get.se=F, use.mod=NULL) {
     }
 }
 
-df2$predicted <- project.48(df2, c('datetime', 'holiday.f', 'lag1', 'lag2', 'lag1d', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'TMAX1d', 'knn'))
+if (do.preanalysis) {
+    df2$predicted <- project.48(df2, c('datetime', 'holiday.f', 'lag1', 'lag2', 'lag1d', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'TMAX1d', 'knn'))
 
-ggplot(df2, aes(log(rmccp), predicted)) +
-    geom_point() + geom_abline(yintercept=0, slope=1, colour='#808080') +
-    theme_bw()
+    ggplot(df2, aes(log(rmccp), predicted)) +
+        geom_point() + geom_abline(yintercept=0, slope=1, colour='#808080') +
+        theme_bw()
+}
+
+## Perform main cross-validation model selection
 
 allcovars.knn <- c('holiday', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'yday.cos', 'yday.sin', 'hour.cos', 'hour.sin', 'weekday', 'TMAX2d', 'TMIN2d', 'PRCP2d')
 allcovars.lfe <- c('datetime', 'holiday.f', 'lag1', 'lag2', 'lag1d', 'lag2d', 'lag3d', 'lag4d', 'lag5d', 'lag6d', 'lag7d', 'pcplag2d', 'pcplag3d', 'pcplag4d', 'pcplag5d', 'pcplag6d', 'pcplag7d', 'rtlag2d', 'loclag2d', 'rplag2d', 'ssrlag2d', 'arlag2d', 'crlag2d', 'pcpcrlag2d', 'TMAX2d', 'TMIN2d', 'PRCP2d', 'knn')
@@ -225,6 +255,11 @@ allcovars.lfe[!(allcovars.lfe %in% best.covars.lfe)]
 df2$knn <- est.knn(df2, best.covars.knn, best.knum)
 df2$predicted <- project.48(df2, best.covars.lfe)
 sqrt(mean((log(df2$rmccp) - df2$predicted)^2, na.rm=T))
+
+valid <- !is.na(log(df2$rmccp)) & !is.na(df2$predicted)
+ss.res <- sum((log(df2$rmccp) - df2$predicted)[valid]^2)
+ss.tot <- sum(log(df2$rmccp)[valid]^2, na.rm=T)
+rsqr <- 1 - ss.res / ss.tot
 
 ggplot(df2, aes(log(rmccp), predicted)) +
     geom_point(alpha=.025) + geom_abline(intercept=0, slope=1, colour='#808080') +

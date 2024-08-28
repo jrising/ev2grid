@@ -1,4 +1,8 @@
 using Test
 
+@testset verbose=true "Optimizer tests" begin
+    include("test_retail.jl")
+    include("test_bizutils.jl")
+    include("test_simulate.jl")
+end
 
-@testset "Peak hours and retail price tests" begin test_is_peak_and_get_retail_price() end

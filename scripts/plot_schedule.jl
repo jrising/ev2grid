@@ -24,12 +24,6 @@ savefig("schedule.png")
 
 baseline = copy(df2)
 
-## Unexpected changes in vehicles
-prob_event = 0.01 # per hour, so 1 per 4 days
-prob_event_vehicles = [0.5, .25, .125, .125]
-prob_event_return = 0.25
-prob_delayed_return = 0.1
-
 pp = plot(baseline.datetime, baseline.vehicles_plugged / 4, seriestype=:steppost, label="Vehicles Plugged-In")
 
 for mc in 1:100

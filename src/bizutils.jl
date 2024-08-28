@@ -14,6 +14,20 @@ function periodstep(steps::Int)
 end
 
 """
+Return matrix of changes in energy, across actions.
+"""
+function make_actions(soc0::Float64)
+    fracpower = range(fracpower_min, fracpower_max, length=PP)
+
+    dsocs = timestep * fracpower
+    soc1s = max.(0., min.(1., soc0 .+ dsocs))
+
+    [0; soc1s .- soc0]
+end
+
+## make_actions(0.5)
+
+"""
 For a SOC for plugged-in vehicles (`soc_plugged`), determine the portion of the fleet that is below a
 prescribed level (`soc_needed`). Assumes the fleet follows a truncated normal distribution.
 

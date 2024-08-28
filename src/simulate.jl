@@ -107,7 +107,7 @@ function get_simustep_deterministic(dt1::DateTime)
     dt_9am = DateTime(date_part, Dates.Time(9, 0, 0))
     dt_5pm = DateTime(date_part, Dates.Time(17, 0, 0))
 
-    if dt_9am - periodstep(1) ≤ dt1 < dt_9am
+    if dt_9am - periodstep(1) ≤ dt1 < dt_5pm - periodstep(1)
         return simustep_alldrive
     elseif dt_5pm - periodstep(1) ≤ dt1 < dt_5pm
         return simustep_allplug

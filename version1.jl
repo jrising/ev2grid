@@ -17,48 +17,11 @@ include("src/bizutils.jl")
 include("src/customer.jl")
 include("src/simulate.jl")
 include("src/retail.jl")
-
-# General configuration
-
-timestep = 1. # 1 hour
-SS = 36 # project for 1.5 days
-# Noon to following midnight
-mcdraws = 1 # 1 for deterministic
-
-# Actions
-fracpower_min = -50. / vehicle_capacity # discharge in terms of fraction of energy
-fracpower_max = 50. / vehicle_capacity # charging in terms of fraction of energy
-PP = 8 # discretized power choices (excluding no-change action)
-efficiency = 0.95 # EFF
-
-# States
-#   vehicles_plugged: The number of plugged in cars
-#   soc_plugged: The fraction of energy available for plugged-in cars
-#   soc_driving: The fraction of energy available for driving cars
-# Number of states for each dimension:
-EE = 5 # 0 - 4 cars
-FF = 11 # For both soc_plugged and soc_driving, 0 - 1
-
+include("src/config.jl")
 include("src/value.jl")
 include("src/optutils.jl")
-
-## Checks on configuration parameters
-
-@argcheck mcdraws > 0
-
-"""
-Return matrix of changes in energy, across actions.
-"""
-function make_actions(soc0::Float64)
-    fracpower = range(fracpower_min, fracpower_max, length=PP)
-
-    dsocs = timestep * fracpower
-    soc1s = max.(0., min.(1., soc0 .+ dsocs))
-
-    [0; soc1s .- soc0]
-end
-
-## make_actions(0.5)
+include("src/fullsim.jl")
+include("src/plotting.jl")
 
 """
 Optimize the cost using Bellman optimization for a stochastic process.
@@ -92,10 +55,6 @@ function optimize(dt0::DateTime, SS::Int)
     # STEP 2: Determine optimal action for t = S-1 and back
     for tt in (SS-1):-1:1
         println(tt)
-
-        # if dt0 + periodstep(tt) < DateTime(Dates.Date(dt0 + periodstep(tt)), Dates.Time(9, 0, 0))
-        #     break
-        # end
 
         soc1_byaction = soc0_byaction .+ dsoc;
 
@@ -132,11 +91,6 @@ function optimize(dt0::DateTime, SS::Int)
         VV1byact = VV1byactsummc / mcdraws + valuep + valuepns_byaction + valuee_byaction * hourly_valuee;
         VV1byact[isnan.(VV1byact)] .= -Inf
 
-        # if all(.!isfinite.(VV1byact[:, 1, 2, 2]))
-        #     println("Cannot support .3")
-        #     break
-        # end
-
         bestact = dropdims(argmax(VV1byact, dims=1), dims=1);
         strat[tt, :, :, :] .= Base.Fix2(getindex, 1).(bestact);
 
@@ -147,13 +101,19 @@ function optimize(dt0::DateTime, SS::Int)
     return strat
 end
 
-dt0 = DateTime("2023-07-15T12:00:00")
+dt0 = DateTime("2023-07-17T12:00:00")
+mcdraws = 1
 @time strat = optimize(dt0, SS);
 
-# 0.945021 seconds (14.10 M allocations: 393.177 MiB, 3.75% gc time)
-
-include("src/fullsim.jl")
-include("src/plotting.jl")
-
-df = fullsimulate(dt0, strat, zeros(SS-1), 4., 0.5, 0.5)
+df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5)
 plot_standard(df)
+plot!(size=(700,400))
+savefig("version1-det.pdf")
+
+mcdraws = 20
+@time strat = optimize(dt0, SS);
+
+df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5)
+plot_standard(df)
+plot!(size=(700,400))
+savefig("version1-sto.pdf")

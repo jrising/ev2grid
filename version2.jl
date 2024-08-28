@@ -4,8 +4,15 @@
 # Choose whichever provides the maximum expected profit in the known initial state
 # Current version assumes available always except 8am - 6pm; future versions could impose more complicated timeseries of reg-available
 
-using CSV
-include("version1.jl")
+include("src/bizutils.jl")
+include("src/customer.jl")
+include("src/simulate.jl")
+include("src/retail.jl")
+include("src/config.jl")
+include("src/value.jl")
+include("src/optutils.jl")
+include("src/fullsim.jl")
+include("src/plotting.jl")
 
 energy_min = 0.
 energy_max = vehicle_capacity * vehicles
@@ -14,9 +21,6 @@ RR = 5 # number of possible regrange values
 
 probfail_penalty = 10.
 probfail_limit = 0.01
-
-pricedf = CSV.read("predprice.csv", DataFrame)
-pricedf[!, :datetime] = DateTime.(replace.(pricedf.datetime, " " => "T"))
 
 """
 Optimize the cost using Bellman optimization for a stochastic process.
