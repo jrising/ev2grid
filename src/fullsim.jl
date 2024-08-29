@@ -26,15 +26,15 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
 
         dt1 = dt0 + periodstep(tt)
         price = get_retail_price(dt1)
-        valuep = value_power_action(price, dsoc)
-        valuepns = value_power_newstate(price, vehicle_split[1], soc_needed - vehicle_split[2])
-        valuee = value_energy(vehicle_split[1], vehicle_split[3], soc_needed) * hourly_valuee
+        valuep = value_power_action(price, dsoc, vehicles_plugged_1)
+        valuepns = value_power_newstate(price, vehicle_split[1], soc_needed - vehicle_split[2], vehicles_plugged_1)
+        valuee = value_energy(vehicle_split[1], vehicle_split[3], soc_needed, vehicles_plugged_1)
 
         pricedfrow = pricedf[pricedf.datetime .== dt1, :] # only works if timestep is whole hours
         regprice = pricedfrow.predpe[1]
         valuer = regprice * get_regrange(tt)
 
-        push!(rows, (dt0 + periodstep(tt - 1), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, dsoc, statebase, valuep, valuepns, valuee, valuer))
+        push!(rows, (dt0 + periodstep(tt), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, dsoc, statebase, valuep, valuepns, valuee, valuer))
 
         ## Apply action
         soc_plugged_2 = soc_plugged_1 + dsoc
@@ -52,7 +52,7 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
         vehicles_plugged_1, soc_plugged_1, soc_driving_1 = vehicles_plugged_2, soc_plugged_2, soc_driving_2
     end
 
-    push!(rows, (dt0 + periodstep(SS-1), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, missing, missing, 0., 0., 0., 0.))
+    push!(rows, (dt0 + periodstep(SS), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, missing, missing, 0., 0., 0., 0.))
 
     df = DataFrame(rows)
     rename!(df, [:datetime, :soc_needed, :vehicles_plugged, :portion_below, :soc_below, :soc_above, :soc_plugged, :soc_driving, :dsoc, :state, :valuep, :valuepns, :valuee, :valuer])

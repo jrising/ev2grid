@@ -1,6 +1,11 @@
 using CSV, DataFrames
 
-hourly_valuee = .1
+# Preferences
+
+# Penalty for having a portion of vehicles below the minimum energy threshold
+weight_portion_above = 0.1
+weight_portion_below = 0.1
+ratio_exponent = 0.5
 
 pricedf = CSV.read("predprice.csv", DataFrame)
 pricedf[!, :datetime] = DateTime.(replace.(pricedf.datetime, " " => "T"))
@@ -19,14 +24,14 @@ Returns:
 
 Note: Ensure `soc_max` and `weight_portion_below` are defined in the scope where this function is used.
 """
-function value_energy(portion_below::Float64, soc_avail::Float64, soc_needed::Float64)
+function value_energy(portion_below::Float64, soc_avail::Float64, soc_needed::Float64, vehicles_plugged::Float64)
     if soc_avail < soc_needed
         return -Inf # Only happens if action made it so
     elseif soc_avail > 1.
-        return (1. - portion_below) - weight_portion_below * portion_below
+        return vehicles_plugged * (weight_portion_above * (1. - portion_below) - weight_portion_below * portion_below)
     end
 
-    return (1. - portion_below) * sqrt((soc_avail - soc_needed) / (soc_max - soc_needed)) - weight_portion_below * portion_below
+    return vehicles_plugged * (weight_portion_above * (1. - portion_below) * ((soc_avail - soc_needed) / (soc_max - soc_needed))^ratio_exponent - weight_portion_below * portion_below)
 end
 
 """
@@ -40,8 +45,8 @@ Returns:
 
 Note: Ensure `vehicle_capacity`, `vehicles`, and `efficiency` are defined in the scope where this function is used.
 """
-function value_power_action(price::Float64, dsoc::Float64)
-    denergy = dsoc * vehicle_capacity * vehicles # charging - discharging in terms of kWh
+function value_power_action(price::Float64, dsoc::Float64, vehicles_plugged::Float64)
+    denergy = dsoc * vehicle_capacity * vehicles_plugged # charging - discharging in terms of kWh
 
     if denergy > 0
         -price * denergy / efficiency # cost of energy
@@ -59,7 +64,7 @@ Returns:
 
 Note: Ensure `vehicle_capacity`, `vehicles`, and `efficiency` are defined in the scope where this function is used.
 """
-function value_power_newstate(price::Float64, portion_below::Float64, soc_toadd_below::Float64)
-    denergy_below = soc_toadd_below * vehicle_capacity * vehicles * portion_below
+function value_power_newstate(price::Float64, portion_below::Float64, soc_toadd_below::Float64, vehicles_plugged::Float64)
+    denergy_below = soc_toadd_below * vehicle_capacity * vehicles_plugged * portion_below
     return -price * denergy_below / efficiency
 end

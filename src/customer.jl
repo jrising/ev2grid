@@ -53,8 +53,3 @@ function soc_scheduled(dt::DateTime)
         return soc_min
     end
 end
-
-# Preferences
-
-# Penalty for having a portion of vehicles below the minimum energy threshold
-weight_portion_below = 1.

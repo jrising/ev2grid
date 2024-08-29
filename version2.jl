@@ -46,6 +46,7 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 4})
     energy_dsoc_byact = [vehicles_plugged_range[ee] * vehicle_capacity * dsoc[pp] for pp=1:PP, ee=1:EE]
 
     soc0_byaction = repeat(reshape(soc_range, 1, 1, FF, 1), PP, EE, 1, FF);
+    soc1_byaction = soc0_byaction .+ dsoc;
 
     # STEP 1: Calculate V[S] under every scenario
     soc_needed = soc_scheduled(dt0 + periodstep(SS))
@@ -67,8 +68,6 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 4})
     # STEP 2: Determine optimal action for t = S-1 and back
     for tt in (SS-1):-1:1
         println(tt)
-
-        soc1_byaction = soc0_byaction .+ dsoc;
 
         dt1 = dt0 + periodstep(tt)
         price = get_retail_price(dt1)
@@ -126,7 +125,7 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 4})
                 probfailsummc += probfailthismc
             end
 
-            VV1byact = VV1byactsummc / mcdraws + valuep + valuepns_byaction + valuee_byaction * hourly_valuee;
+            VV1byact = VV1byactsummc / mcdraws + valuep + valuepns_byaction + valuee_byaction;
             VV1byact[isnan.(VV1byact)] .= -Inf
 
             probfailbyact = probfailsummc / mcdraws
