@@ -51,7 +51,7 @@ function value_power_action(price::Float64, dsoc::Float64, vehicles_plugged::Flo
     if denergy > 0
         -price * denergy / efficiency # cost of energy
     else
-        price * denergy # payment for energy
+        -price * denergy # payment for energy
     end
 end
 

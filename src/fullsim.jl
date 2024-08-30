@@ -40,16 +40,16 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
         soc_plugged_2 = soc_plugged_1 + dsoc
 
         ## Apply simulation
-        soc_needed = soc_scheduled(dt1)
-        vehicle_split = split_below(soc_plugged_2, soc_needed)
-
         if stochastic
             simustep = get_simustep_stochastic(dt1)
         else
             simustep = get_simustep_deterministic(dt1)
         end
-        vehicles_plugged_2, soc_plugged_2, soc_driving_2 = adjust_below(simustep(vehicles_plugged_1, vehicles_plugged_1 * (1. - vehicle_split[1]), vehicle_split[3], soc_driving_1), vehicle_split[2], vehicles_plugged_1 * vehicle_split[1])
+        soc_needed = soc_scheduled(dt1)
+        vehicle_split = split_below(soc_plugged_2, soc_needed)
+        vehicles_plugged_2, soc_plugged_2, soc_driving_2 = adjust_below(simustep(vehicles_plugged_1, vehicles_plugged_1 * (1. - vehicle_split[1]), soc_plugged_2, soc_driving_1), vehicle_split[2], vehicles_plugged_1 * vehicle_split[1])
         vehicles_plugged_1, soc_plugged_1, soc_driving_1 = vehicles_plugged_2, soc_plugged_2, soc_driving_2
+        vehicle_split = split_below(soc_plugged_2, soc_needed)
     end
 
     push!(rows, (dt0 + periodstep(SS), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, missing, missing, 0., 0., 0., 0.))
@@ -61,7 +61,8 @@ end
 function fullsimulate(dt0::DateTime, strat::AbstractArray{Int}, regrange::Vector{Float64}, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, stochastic::Bool=false)
     function get_dsoc(tt, state)
         # Determine action for this period
-        dsoc = make_actions(state[2])
+        soc_range = [0.; range(soc_min, soc_max, FF-1)];
+        dsoc = make_actions(state[2], soc_range)
 
         statebase, stateceil1, probbase1, stateceil2, probbase2, stateceil3, probbase3 = breakstate(state)
 
@@ -80,3 +81,24 @@ function fullsimulate(dt0::DateTime, dsoc::Vector{Float64}, vehicles_plugged_1::
     fullsimulate(dt0, (tt, state) -> dsoc[tt], (tt) -> 0., vehicles_plugged_1, soc_plugged_1, soc_driving_1, stochastic)
 end
 
+function fullsimulate_modify(dt0::DateTime, strat::AbstractArray{Int}, changes::Dict{Int64, Float64}, regrange::Vector{Float64}, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, stochastic::Bool=false)
+    function get_dsoc(tt, state)
+        if tt ∈ keys(changes)
+            return changes[tt]
+        end
+        # Determine action for this period
+        soc_range = [0.; range(soc_min, soc_max, FF-1)];
+        dsoc = make_actions(state[2], soc_range)
+
+        statebase, stateceil1, probbase1, stateceil2, probbase2, stateceil3, probbase3 = breakstate(state)
+
+        ppbase = strat[tt, statebase...]
+        ppceil1 = strat[tt, makeindex1(statebase, stateceil1)]
+        ppceil2 = strat[tt, makeindex2(statebase, stateceil2)]
+        ppceil3 = strat[tt, makeindex3(statebase, stateceil3)]
+        dsoc_pp = ((probbase1 + probbase2 + probbase3) .* dsoc[ppbase] + (1 .- probbase1) .* dsoc[ppceil1] + (1 .- probbase2) .* dsoc[ppceil2] + (1 .- probbase3) .* dsoc[ppceil3]) / 3;
+
+        dsoc_pp
+    end
+    fullsimulate(dt0, get_dsoc, tt -> regrange[tt], vehicles_plugged_1, soc_plugged_1, soc_driving_1, stochastic)
+end

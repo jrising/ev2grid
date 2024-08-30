@@ -9,7 +9,7 @@ timestep = 1. # 1 hour
 SS = 36 # project for 1.5 days
 EE = 5 # 0 - 4 cars
 FF = 11 # For both soc_plugged and soc_driving, 0 - 1
-PP = 8 # discretized power choices (excluding no-change action)
+PP = 9 # discretized power choices (excluding no-change action)
 
 dt0 = DateTime("2023-07-15T12:00:00")
 

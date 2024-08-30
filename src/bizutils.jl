@@ -16,13 +16,18 @@ end
 """
 Return matrix of changes in energy, across actions.
 """
-function make_actions(soc0::Float64)
-    fracpower = range(fracpower_min, fracpower_max, length=PP)
+function make_actions(soc0::Float64, soc_preferred::Vector{Float64})
+    soc_diff = soc_preferred .- soc0
+    soc_diff[soc_diff .> fracpower_max * timestep] .= fracpower_max * timestep
+    soc_diff[soc_diff .< fracpower_min * timestep] .= fracpower_min * timestep
+    return soc_diff
 
-    dsocs = timestep * fracpower
-    soc1s = max.(0., min.(1., soc0 .+ dsocs))
+    # fracpower = range(fracpower_min, fracpower_max, length=PP - 1)
 
-    [0; soc1s .- soc0]
+    # dsocs = timestep * fracpower
+    # soc1s = max.(0., min.(1., soc0 .+ dsocs))
+
+    # [0; soc1s .- soc0]
 end
 
 ## make_actions(0.5)

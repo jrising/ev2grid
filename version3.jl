@@ -40,7 +40,7 @@ function optimize(dt0::DateTime, regrange::Vector{Float64})
     vehicles_plugged_range = collect(range(0., vehicles, EE));
 
     # Construct exogenous change levels
-    dsoc_FF = [make_actions(soc_plugged) for soc_plugged=soc_range];
+    dsoc_FF = [make_actions(soc_plugged, soc_range) for soc_plugged=soc_range];
     dsoc = [dsoc_FF[ff][pp] for pp=1:PP, vehicles_plugged=vehicles_plugged_range, ff=1:FF, soc_driving=soc_range];
     energy_dsoc_byact = [vehicles_plugged_range[ee] * vehicle_capacity * dsoc[pp] for pp=1:PP, ee=1:EE]
 
@@ -50,8 +50,8 @@ function optimize(dt0::DateTime, regrange::Vector{Float64})
     # STEP 1: Calculate V[S] under every scenario
     soc_needed = soc_scheduled(dt0 + periodstep(SS));
     vehicle_split = split_below.(soc_range, soc_needed);
-    value_energy_bysoc = [value_energy(vehicle_split[ff][1], vehicle_split[ff][3], soc_needed) for ff=1:FF];
-    VV2 = repeat(reshape(value_energy_bysoc, 1, FF), EE, 1, FF);
+    value_energy_bysoc = [value_energy(vehicle_split[ff][1], vehicle_split[ff][3], soc_needed, vehicles_plugged_range[ee]) for ee=1:EE, ff=1:FF]
+    VV2 = repeat(reshape(value_energy_bysoc, EE, FF, 1), 1, 1, FF)
 
     # Determine the energy available for each state
     # Assumes same soc_needed as midnight
@@ -68,16 +68,16 @@ function optimize(dt0::DateTime, regrange::Vector{Float64})
 
         dt1 = dt0 + periodstep(tt)
         price = get_retail_price(dt1)
-        valuep = value_power_action.(price, dsoc);
+        valuep = [value_power_action(price, dsoc[pp, ee, ff1, ff2], vehicles_plugged_range[ee]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF]
 
         soc_needed = soc_scheduled(dt1)
         vehicle_split = split_below.(soc_range, soc_needed)
-        valuepns = [value_power_newstate.(price, vehicle_split[ff12][1], soc_needed - vehicle_split[ff12][2]) for ff12 in 1:FF]
-        valuee = [value_energy.(vehicle_split[ff12][1], vehicle_split[ff12][3], soc_needed) for ff12 in 1:FF];
+        valuepns = [value_power_newstate(price, vehicle_split[ff12][1], soc_needed - vehicle_split[ff12][2], vehicles_plugged_range[ee]) for ee=1:EE, ff12=1:FF]
+        valuee = [value_energy.(vehicle_split[ff12][1], vehicle_split[ff12][3], soc_needed, vehicles_plugged_range[ee]) for ee=1:EE, ff12=1:FF];
 
         ff12_byaction = discrete_roundbelow.(soc1_byaction, soc_min, soc_max, FF);
-        valuepns_byaction = valuepns[ff12_byaction];
-        valuee_byaction = valuee[ff12_byaction];
+        valuepns_byaction = [valuepns[ee, ff12_byaction[pp, ee, ff1, ff2]] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+        valuee_byaction = [valuee[ee, ff12_byaction[pp, ee, ff1, ff2]] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
         portion_below_byaction = [vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
         pricedfrow = pricedf[pricedf.datetime .== dt1, :] # only works if timestep is whole hours
@@ -99,7 +99,9 @@ function optimize(dt0::DateTime, regrange::Vector{Float64})
                 simustep = get_simustep_stochastic(dt1)
             end
             # Note: We impose costs from soc-below vehicles, but do not adjust state because it pushes up plugged-in soc every period
-            statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]), soc1_byaction[pp, ee, ff1, ff2], soc_range[ff2]), vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+            statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]),
+                                               vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][3], soc_range[ff2]),
+                                      vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
             state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2);
             VV1byactthismc = combinebyact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
