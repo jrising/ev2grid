@@ -42,7 +42,7 @@ function optimize(dt0::DateTime, regrange::Vector{Float64})
     # Construct exogenous change levels
     dsoc_FF = [make_actions(soc_plugged, soc_range) for soc_plugged=soc_range];
     dsoc = [dsoc_FF[ff][pp] for pp=1:PP, vehicles_plugged=vehicles_plugged_range, ff=1:FF, soc_driving=soc_range];
-    energy_dsoc_byact = [vehicles_plugged_range[ee] * vehicle_capacity * dsoc[pp] for pp=1:PP, ee=1:EE]
+    energy_dsoc_byact = [vehicles_plugged_range[ee] * vehicle_capacity * dsoc[pp, ee, ff1, ff2] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
     soc0_byaction = repeat(reshape(soc_range, 1, 1, FF, 1), PP, EE, 1, FF);
     soc1_byaction = soc0_byaction .+ dsoc;
@@ -87,7 +87,7 @@ function optimize(dt0::DateTime, regrange::Vector{Float64})
         regrange_fail_bystate = 1. .- repeat(regrange_good, 1, 1, FF);
         regrange_fail_byact = repeat(reshape(regrange_fail_bystate, 1, EE, FF, FF), PP);
         # Also disallow actions that would overextend our total charge range
-        regrange_good_byact = [(energy_bystate[ee, ff1] .- regrange[tt] + energy_dsoc_byact[pp, ee] .> energy_minallow[ee, ff1]) .& (energy_bystate[ee, ff1] .+ regrange[tt] + energy_dsoc_byact[pp, ee] .< energy_maxallow[ee, ff1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+        regrange_good_byact = [(energy_bystate[ee, ff1] .- regrange[tt] + energy_dsoc_byact[pp, ee, ff1, ff2] .> energy_minallow[ee, ff1]) .& (energy_bystate[ee, ff1] .+ regrange[tt] + energy_dsoc_byact[pp, ee, ff1, ff2] .< energy_maxallow[ee, ff1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
         VV1byactsummc = zeros(Float64, PP, EE, FF, FF);
         probfailsummc = zeros(Float64, PP, EE, FF, FF);
@@ -132,11 +132,11 @@ function optimize(dt0::DateTime, regrange::Vector{Float64})
     return strat, probfail
 end
 
-dt0 = DateTime("2023-07-15T12:00:00")
+dt0 = DateTime("2023-07-17T12:00:00")
 vehicles_plugged_1 = 0.
 soc_plugged_1 = 0.5
 soc_driving_1 = 0.5
-mcdraws = 20
+mcdraws = 1
 
 function calcvalue(df, regrange)
     df[!, :kw] = (df.dsoc .* vehicle_capacity .* df.vehicles_plugged .* (1 .- df.portion_below) / timestep) .+
@@ -202,4 +202,4 @@ df[!, :optregrange] = [0.; regrangebest[1:end-1]]
 pp = plot_standard(df)
 plot!(pp, df.datetime, df.soc_plugged, ribbon=df.optregrange / (vehicles * vehicle_capacity), label="Regulation Range")
 plot!(size=(700,400))
-# savefig("optregrange.pdf")
+savefig("optregrange-v2.pdf")

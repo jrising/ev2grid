@@ -20,7 +20,6 @@ energy_max = vehicle_capacity * vehicles
 RR = 5 # number of possible regrange values
 
 probfail_penalty = 10.
-probfail_limit = 0.01
 
 """
 Optimize the cost using Bellman optimization for a stochastic process.
@@ -43,7 +42,7 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 4})
     # Construct exogenous change levels
     dsoc_FF = [make_actions(soc_plugged, soc_range) for soc_plugged=soc_range];
     dsoc = [dsoc_FF[ff][pp] for pp=1:PP, vehicles_plugged=vehicles_plugged_range, ff=1:FF, soc_driving=soc_range];
-    energy_dsoc_byact = [vehicles_plugged_range[ee] * vehicle_capacity * dsoc[pp] for pp=1:PP, ee=1:EE]
+    energy_dsoc_byact = [vehicles_plugged_range[ee] * vehicle_capacity * dsoc[pp, ee, ff1, ff2] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF]
 
     soc0_byaction = repeat(reshape(soc_range, 1, 1, FF, 1), PP, EE, 1, FF);
     soc1_byaction = soc0_byaction .+ dsoc;
@@ -99,7 +98,7 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 4})
             regrange_fail_bystate = 1. .- repeat(regrange_good, 1, 1, FF);
             regrange_fail_byact = repeat(reshape(regrange_fail_bystate, 1, EE, FF, FF), PP);
             # Also disallow actions that would overextend our total charge range
-            regrange_good_byact = [(energy_bystate[ee, ff1] .- regrange + energy_dsoc_byact[pp, ee] .> energy_minallow[ee, ff1]) .& (energy_bystate[ee, ff1] .+ regrange + energy_dsoc_byact[pp, ee] .< energy_maxallow[ee, ff1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF]
+            regrange_good_byact = [(energy_bystate[ee, ff1] .- regrange + energy_dsoc_byact[pp, ee, ff1, ff2] .> energy_minallow[ee, ff1]) .& (energy_bystate[ee, ff1] .+ regrange + energy_dsoc_byact[pp, ee, ff1, ff2] .< energy_maxallow[ee, ff1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF]
 
             for mc in 1:mcdraws
                 if mcdraws == 1
@@ -112,7 +111,7 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 4})
                                                    vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][3], soc_range[ff2]),
                                           vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
-                state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2)
+                state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2);
                 VV1byactthismc = combinebyact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
                 VV1byactsummc += VV1byactthismc;
 
@@ -155,8 +154,8 @@ function optimize(dt0::DateTime, probstate::Array{Float64, 4})
     return strat, probfail, optregrange
 end
 
-dt0 = DateTime("2023-07-15T12:00:00")
-vehicles_plugged_1 = 4.
+dt0 = DateTime("2023-07-17T12:00:00")
+vehicles_plugged_1 = 0.
 soc_plugged_1 = 0.5
 soc_driving_1 = 0.5
 mcdraws = 1
@@ -210,4 +209,4 @@ df[!, :optregrange] = [0.; optregrange]
 pp = plot_standard(df)
 plot!(pp, df.datetime, df.soc_plugged, ribbon=df.optregrange / (vehicles * vehicle_capacity), label="Reg. Range")
 plot!(size=(700,400))
-savefig("optregrange.pdf")
+savefig("optregrange-v1.pdf")

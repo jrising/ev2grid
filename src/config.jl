@@ -1,3 +1,5 @@
+using ArgCheck
+
 # General configuration
 
 timestep = 1. # 1 hour
@@ -6,7 +8,7 @@ SS = 36 # project for 1.5 days
 mcdraws = 1 # 1 for deterministic
 
 # Actions
-PP = 9 # discretized power choices (including no-change action)
+PP = 11 # discretized power choices (including no-change action)
 
 # States
 #   vehicles_plugged: The number of plugged in cars

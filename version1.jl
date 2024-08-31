@@ -94,6 +94,9 @@ function optimize(dt0::DateTime, SS::Int)
 
         bestact = dropdims(argmax(VV1byact, dims=1), dims=1);
         strat[tt, :, :, :] .= Base.Fix2(getindex, 1).(bestact);
+        if any(strat[tt, :, :, :] .== 0)
+            break
+        end
 
         VV2 = VV1byact[bestact]
         VV2[isnan.(VV2)] .= -Inf
@@ -111,7 +114,7 @@ plot_standard(df)
 plot!(size=(700,400))
 savefig("version1-det.pdf")
 
-mcdraws = 20
+mcdraws = 100
 @time strat, VV = optimize(dt0, SS);
 
 df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5)
@@ -122,15 +125,31 @@ savefig("version1-sto.pdf")
 ## How do the value parameters affect the penultimate level?
 mcdraws = 1
 results = DataFrame(weight_portion_above=Float64[], weight_portion_below=Float64[], ratio_exponent=Float64[], socend=Float64[])
-for wp_above in range(0, .2, 5)
-    for wp_below in range(0, .2, 5)
+for wp_above in range(0, 1., 5)
+    for wp_below in range(0, 0.5, 5)
         for re in [.25, .5, 1, 2]
             global weight_portion_above = wp_above
             global weight_portion_below = wp_below
             global ratio_exponent = re
             strat, VV = optimize(dt0, SS);
             df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5)
-            push!(results, [weight_portion_above, weight_portion_below, ratio_exponent, df.soc_plugged[end-1]])
+            push!(results, [weight_portion_above, weight_portion_below, ratio_exponent, sum(df.soc_plugged .* df.vehicles_plugged) / sum(df.vehicles_plugged)])
         end
     end
 end
+
+function dataframe_to_matrix(df, xcol, ycol, vcol)
+    xs = sort(unique(df[!, xcol]))
+    ys = sort(unique(df[!, ycol]))
+    matrix = [df[findall((df[!, xcol] .== x) .& (df[!, ycol] .== y)), vcol][1] for y in ys, x in xs]
+    return matrix
+end
+
+value_matrix = dataframe_to_matrix(results[results.ratio_exponent .== 0.5, :], :weight_portion_above, :weight_portion_below, :socend)
+heatmap(range(0, 1., 5), range(0, 0.5, 5), value_matrix, xlabel="Weight of above portion", ylabel="Weight of below portion")
+plot!(size=(600,400))
+savefig("version1-ves.png")
+
+value_matrix = dataframe_to_matrix(results[results.ratio_exponent .== 1., :], :weight_portion_above, :weight_portion_below, :socend)
+heatmap(range(0, 1., 5), range(0, 0.5, 5), value_matrix, xlabel="Weight of above portion", ylabel="Weight of below portion")
+savefig("version1-ves2.png")

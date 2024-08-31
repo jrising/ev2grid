@@ -3,7 +3,7 @@ using CSV, DataFrames
 # Preferences
 
 # Penalty for having a portion of vehicles below the minimum energy threshold
-weight_portion_above = 0.1
+weight_portion_above = 0.05
 weight_portion_below = 0.1
 ratio_exponent = 0.5
 
@@ -27,7 +27,7 @@ Note: Ensure `soc_max` and `weight_portion_below` are defined in the scope where
 function value_energy(portion_below::Float64, soc_avail::Float64, soc_needed::Float64, vehicles_plugged::Float64)
     if soc_avail < soc_needed
         return -Inf # Only happens if action made it so
-    elseif soc_avail > 1.
+    elseif soc_avail > soc_max
         return vehicles_plugged * (weight_portion_above * (1. - portion_below) - weight_portion_below * portion_below)
     end
 
