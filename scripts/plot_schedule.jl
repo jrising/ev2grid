@@ -1,17 +1,22 @@
 using Dates, Plots, DataFrames
 
-include("src/utils.jl")
-include("src/customer.jl")
+include("../src/bizutils.jl")
+include("../src/customer.jl")
 
-df = DataFrame(dt=DateTime("2024-06-01T00:00:00"):Hour(1):DateTime("2024-06-03T00:00:00"))
+timestep = 1. # 1 hour
+df = DataFrame(dt=DateTime("2023-06-01T00:00:00"):Hour(1):DateTime("2023-06-03T00:00:00"))
 df[!, :soc] = soc_scheduled.(df.dt)
 
 pp = plot(df.dt, df.soc, seriestype=:steppost, label="")
 plot!(pp, size=(1000, 400))
 savefig("schedule.png")
 
-include("src/simulate.jl")
-include("src/fullsim.jl")
+include("../src/config.jl")
+include("../src/optutils.jl")
+include("../src/retail.jl")
+include("../src/value.jl")
+include("../src/simulate.jl")
+include("../src/fullsim.jl")
 
 SS = nrow(df) - 1
 df2 = fullsimulate(df.dt[1] - periodstep(1), zeros(SS-1), 4., 0.7, 0.7, false)
@@ -27,12 +32,11 @@ baseline = copy(df2)
 pp = plot(baseline.datetime, baseline.vehicles_plugged / 4, seriestype=:steppost, label="Vehicles Plugged-In")
 
 for mc in 1:100
-    df2 = fullsimulate(df.dt[1] - periodstep(1), zeros(SS-1), 4., 0.7, 0.7, true)
+    local df2 = fullsimulate(df.dt[1] - periodstep(1), zeros(SS-1), 4., 0.7, 0.7, true)
     if all(df2.vehicles_plugged .== baseline.vehicles_plugged)
         continue
     end
 
-    println("OK!")
     plot!(pp, df2.datetime, df2.vehicles_plugged / 4, seriestype=:steppost, la=.25, legend=false)
 end
 

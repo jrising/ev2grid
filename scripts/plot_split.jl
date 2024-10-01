@@ -1,7 +1,7 @@
 using DataFrames
 using Plots
 
-include("src/bizutils.jl")
+include("../src/bizutils.jl")
 
 pp = plot([0.3, 0.3], [0, 1], seriestype=:path, color=:red, linewidth=2, label="Vertical Line")
 

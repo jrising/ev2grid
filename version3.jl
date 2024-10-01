@@ -175,24 +175,24 @@ for ll in 1:10000
     Random.seed!(20240826);
     strat, probfail = optimize(dt0, regrange);
 
-    df = fullsimulate(dt0, strat, regrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, mcdraws > 1);
+    local df = fullsimulate(dt0, strat, regrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, mcdraws > 1);
     value = calcvalue(df, regrange)
 
     if value > valuebest
         println("Improved.")
-        valuebest = value
-        regrangebest = regrange
-        stratbest = strat
-        lastimprove = ll
+        global valuebest = value
+        global regrangebest = regrange
+        global stratbest = strat
+        global lastimprove = ll
 
         calcmaxrange!(df)
 
-        dfbest = df
+        global dfbest = df
     elseif ll >= 100 && (ll - lastimprove > 10)
         break
     end
 
-    regrange = rand.(Truncated.(Normal.(min.(dfbest.regrange_maxrange, regrangebest), exp(-ll / 100)),
+    global regrange = rand.(Truncated.(Normal.(min.(dfbest.regrange_maxrange, regrangebest), exp(-ll / 100)),
                                 0., dfbest.regrange_maxrange))
 end
 

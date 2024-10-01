@@ -178,7 +178,7 @@ for ll in 1:10
 
     dfall = nothing
     for ii in 1:mcdraws
-        df = fullsimulate(dt0, strat, optregrange, vehicles_plugged_1, soc_plugged_1, 0., mcdraws > 1)
+        local df = fullsimulate(dt0, strat, optregrange, vehicles_plugged_1, soc_plugged_1, 0., mcdraws > 1)
         energy = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) .* df.soc_above
         energy_minallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.3
         energy_maxallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.95
@@ -191,7 +191,7 @@ for ll in 1:10
         end
     end
 
-    probstate = zeros(SS-1, EE, FF, FF);
+    global probstate = zeros(SS-1, EE, FF, FF);
     for tt in 1:SS-1
         dt1 = dt0 + periodstep(tt - 1)
 
