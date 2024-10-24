@@ -17,7 +17,7 @@ soc_range = [0.; range(soc_min, soc_max, FF-1)];
 vehicles_plugged_range = collect(range(0., vehicles, EE));
 soc0_byaction = repeat(reshape(soc_range, 1, 1, FF, 1), PP, EE, 1, FF);
 
-dsoc_FF = [make_actions(soc_plugged) for soc_plugged=soc_range];
+dsoc_FF = [make_actions(soc_plugged, soc_range) for soc_plugged=soc_range];
 dsoc = [dsoc_FF[ff][pp] for pp=1:PP, vehicles_plugged=vehicles_plugged_range, ff=1:FF, soc_driving=soc_range];
 
 rowarr = zeros(PP, EE, FF, FF);
