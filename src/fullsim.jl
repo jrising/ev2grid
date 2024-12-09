@@ -61,7 +61,7 @@ end
 function fullsimulate(dt0::DateTime, strat::AbstractArray{Int}, regrange::Vector{Float64}, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, stochastic::Bool=false)
     function get_dsoc(tt, state)
         # Determine action for this period
-        soc_range = [0.; range(soc_min, soc_max, FF-1)];
+        soc_range = [0.8; range(0.8, 0.95, FF-1)];
         dsoc = make_actions(state[2], soc_range)
 
         statebase, stateceil1, probbase1, stateceil2, probbase2, stateceil3, probbase3 = breakstate(state)
