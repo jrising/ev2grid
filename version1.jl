@@ -105,6 +105,7 @@ function optimize(dt0::DateTime, SS::Int,mcdraws::Int)
     return strat, VV2
 end
 
+
 function ruleOfThumb(dt0::DateTime, SS::Int,mcdraws::Int)
     strat = zeros(Int64, SS-1, EE, FF, FF);
 
@@ -132,6 +133,16 @@ function ruleOfThumb(dt0::DateTime, SS::Int,mcdraws::Int)
         dt1 = dt0 + periodstep(tt)
         price = get_retail_price(dt1)
         ispeak = is_peak(dt1)
+        prev_dt = is_peak(dt0)
+        if ispeak
+            if !prev_dt
+                first_hour_peak = true
+            else
+                first_hour_peak = false 
+            end
+        else
+            first_hour_peak = false
+        end 
         valuep = [value_power_action(price, dsoc[pp, ee, ff1, ff2], vehicles_plugged_range[ee]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
         soc_needed = soc_scheduled(dt1)
@@ -168,20 +179,32 @@ function ruleOfThumb(dt0::DateTime, SS::Int,mcdraws::Int)
         bestact = dropdims(argmax(VV1byact, dims=1), dims=1);
         ## adjust the strat 
         # Define heuristic-based strategy
-        # Define heuristic-based strategy with either charge or discharge
-        # Define heuristic-based strategy with explicit charge and discharge conditions
+        # for ee in 1:EE, ff in 1:FF
+        #     current_soc = soc_range[ff]
+
+        #     if current_soc < 0.95 * soc_max && !ispeak
+        #         # Charge if SOC is below 95% and not peak
+        #         strat[tt, ee, ff, :] .= 10  # Set to 1 for "charge"
+        #     elseif current_soc > 0.8 * soc_max && ispeak
+        #         # Discharge if SOC is above 80% and it's peak
+        #         strat[tt, ee, ff, :] .= 1  # Set to 2 for "discharge"
+        #     else
+        #         # Default action if neither condition is met
+        #         strat[tt, ee, ff, :] .= 10  # Set to 1 for "charge" as fallback
+        #     end
+        # end
         for ee in 1:EE, ff in 1:FF
             current_soc = soc_range[ff]
-
-            if current_soc < 0.95 * soc_max && !ispeak
-                # Charge if SOC is below 95% and not peak
-                strat[tt, ee, ff, :] .= 10  # Set to 1 for "charge"
-            elseif current_soc > 0.8 * soc_max && ispeak
-                # Discharge if SOC is above 80% and it's peak
-                strat[tt, ee, ff, :] .= 1  # Set to 2 for "discharge"
+        
+            if !is_peak(dt1)
+                # If it is not peak, we always charge
+                strat[tt, ee, ff, :] .= 10
+            elseif is_peak(dt1) && first_hour_peak
+                # If it just became peak (the first hour), discharge
+                strat[tt, ee, ff, :] .= 1
             else
-                # Default action if neither condition is met
-                strat[tt, ee, ff, :] .= 10  # Set to 1 for "charge" as fallback
+                # Otherwise, do something else (e.g., keep charging)
+                strat[tt, ee, ff, :] .= 10
             end
         end
     end 
