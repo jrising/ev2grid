@@ -15,7 +15,7 @@ Simulates the energy fraction of vehicles while applying a given changes in ener
 - `DataFrame`: A DataFrame containing columns for each timestep including datetime, needed energy fraction, fractions and energy below and above threshold, plugged and driving vehicle energy, energy fraction change (`dsoc`), and state representation.
 """
 function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, stochastic::Bool=false)
-    rows = Tuple{DateTime, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Union{Missing, Float64}, Union{Missing, Tuple{Int, Int, Int}}, Float64, Float64, Float64, Float64}[]
+    rows = Tuple{DateTime, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Union{Missing, Float64}, Union{Missing, Tuple{Int, Int, Int}}, Float64, Float64, Float64, Float64, Float64}[]
 
     soc_needed = soc_scheduled(dt0 + periodstep(1))
     vehicle_split = split_below(soc_plugged_1, soc_needed)
@@ -29,12 +29,13 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
         valuep = value_power_action(price, dsoc, vehicles_plugged_1)
         valuepns = value_power_newstate(price, vehicle_split[1], soc_needed - vehicle_split[2], vehicles_plugged_1)
         valuee = value_energy(vehicle_split[1], vehicle_split[3], soc_needed, vehicles_plugged_1)
+        benefit_cost = price*dsoc # calculate either revenue or cost depending on direction of dsoc
 
         pricedfrow = pricedf[pricedf.datetime .== dt1, :] # only works if timestep is whole hours
         regprice = pricedfrow.predpe[1]
         valuer = regprice * get_regrange(tt)
 
-        push!(rows, (dt0 + periodstep(tt), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, dsoc, statebase, valuep, valuepns, valuee, valuer))
+        push!(rows, (dt0 + periodstep(tt), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, dsoc, statebase, valuep, valuepns, valuee, valuer,benefit_cost))
 
         ## Apply action
         soc_plugged_2 = soc_plugged_1 + dsoc
@@ -52,10 +53,10 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
         vehicle_split = split_below(soc_plugged_2, soc_needed)
     end
 
-    push!(rows, (dt0 + periodstep(SS), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, missing, missing, 0., 0., 0., 0.))
+    push!(rows, (dt0 + periodstep(SS), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, missing, missing, 0., 0., 0., 0., 0.))
 
     df = DataFrame(rows)
-    rename!(df, [:datetime, :soc_needed, :vehicles_plugged, :portion_below, :soc_below, :soc_above, :soc_plugged, :soc_driving, :dsoc, :state, :valuep, :valuepns, :valuee, :valuer])
+    rename!(df, [:datetime, :soc_needed, :vehicles_plugged, :portion_below, :soc_below, :soc_above, :soc_plugged, :soc_driving, :dsoc, :state, :valuep, :valuepns, :valuee, :valuer, :benefit_cost])
 end
 
 function fullsimulate(dt0::DateTime, strat::AbstractArray{Int}, regrange::Vector{Float64}, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, stochastic::Bool=false)
