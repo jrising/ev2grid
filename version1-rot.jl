@@ -26,7 +26,7 @@ end
 dt0 = DateTime("2023-07-17T12:00:00")
 
 df = fullsimulate(dt0, get_dsoc, (tt) -> 0., 0., 0.5, 0.5)
-benefits = sum(df[!, "benefit_cost"])
+benefits = sum(df[!, "valuep"])
 plot_standard(df)
 plot!(size=(700,400))
 savefig("version1-rot.pdf")
