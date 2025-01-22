@@ -110,6 +110,7 @@ mcdraws = 1
 @time strat, VV = optimize(dt0, SS);
 
 df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5)
+benefits = sum(df[!, "valuep"])
 plot_standard(df)
 plot!(size=(700,400))
 savefig("version1-det.pdf")
@@ -118,6 +119,7 @@ mcdraws = 100
 @time strat, VV = optimize(dt0, SS);
 
 df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5)
+benefits_sto = sum(df[!, "valuep"])
 plot_standard(df)
 plot!(size=(700,400))
 savefig("version1-sto.pdf")
