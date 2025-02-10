@@ -26,7 +26,7 @@ energy_9am = vehicles * 329 * 42 / 1e3 + 0.3 * vehicle_capacity * vehicles # Req
 soc_9am = energy_9am / (vehicle_capacity * vehicles)
 
 # Actions
-max_charging_kw = 50.
+max_charging_kw = 6.6 # Maximum charging rate in kW for Level 2
 fracpower_min = -max_charging_kw / vehicle_capacity # discharge in terms of fraction of energy
 fracpower_max = max_charging_kw / vehicle_capacity # charging in terms of fraction of energy
 efficiency = 0.95 # EFF
