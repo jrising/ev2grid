@@ -14,14 +14,14 @@ Simulates the energy fraction of vehicles while applying a given changes in ener
 # Returns
 - `DataFrame`: A DataFrame containing columns for each timestep including datetime, needed energy fraction, fractions and energy below and above threshold, plugged and driving vehicle energy, energy fraction change (`dsoc`), and state representation.
 """
-function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, stochastic::Bool=false)
+function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, drive_starts_time::Time, park_starts_time::Time, stochastic::Bool=false)
     rows = Tuple{DateTime, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Union{Missing, Float64}, Union{Missing, Tuple{Int, Int, Int}}, Float64, Float64, Float64, Float64}[]
 
     soc_needed = soc_scheduled(dt0 + periodstep(1))
     vehicle_split = split_below(soc_plugged_1, soc_needed)
 
     for tt in 1:(SS-1)
-        dsoc = get_dsoc(tt, (vehicles_plugged_1, soc_plugged_1, soc_driving_1))
+        dsoc = get_dsoc(tt, (vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time))
         statebase, stateceil1, probbase1, stateceil2, probbase2, stateceil3, probbase3 = breakstate((vehicles_plugged_1, soc_plugged_1, soc_driving_1))
 
         dt1 = dt0 + periodstep(tt)
@@ -41,9 +41,9 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
 
         ## Apply simulation
         if stochastic
-            simustep = get_simustep_stochastic(dt1)
+            simustep = get_simustep_stochastic(dt1, drive_starts_time, park_starts_time)
         else
-            simustep = get_simustep_deterministic(dt1)
+            simustep = get_simustep_deterministic(dt1, drive_starts_time, park_starts_time)
         end
         soc_needed = soc_scheduled(dt1)
         vehicle_split = split_below(soc_plugged_2, soc_needed)
@@ -58,7 +58,7 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
     rename!(df, [:datetime, :soc_needed, :vehicles_plugged, :portion_below, :soc_below, :soc_above, :soc_plugged, :soc_driving, :dsoc, :state, :valuep, :valuepns, :valuee, :valuer])
 end
 
-function fullsimulate(dt0::DateTime, strat::AbstractArray{Int}, regrange::Vector{Float64}, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, stochastic::Bool=false)
+function fullsimulate(dt0::DateTime, strat::AbstractArray{Int}, regrange::Vector{Float64}, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, drive_starts_time::Time, park_starts_time::Time, stochastic::Bool=false)
     function get_dsoc(tt, state)
         # Determine action for this period
         soc_range = [0.; range(soc_min, soc_max, FF-1)];
@@ -74,11 +74,11 @@ function fullsimulate(dt0::DateTime, strat::AbstractArray{Int}, regrange::Vector
 
         dsoc_pp
     end
-    fullsimulate(dt0, get_dsoc, tt -> regrange[tt], vehicles_plugged_1, soc_plugged_1, soc_driving_1, stochastic)
+    fullsimulate(dt0, get_dsoc, tt -> regrange[tt], vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time, stochastic)
 end
 
-function fullsimulate(dt0::DateTime, dsoc::Vector{Float64}, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, stochastic::Bool=false)
-    fullsimulate(dt0, (tt, state) -> dsoc[tt], (tt) -> 0., vehicles_plugged_1, soc_plugged_1, soc_driving_1, stochastic)
+function fullsimulate(dt0::DateTime, dsoc::Vector{Float64}, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, drive_starts_time::Time, park_starts_time::Time, stochastic::Bool=false)
+    fullsimulate(dt0, (tt, state) -> dsoc[tt], (tt) -> 0., vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time, stochastic)
 end
 
 function fullsimulate_modify(dt0::DateTime, strat::AbstractArray{Int}, changes::Dict{Int64, Float64}, regrange::Vector{Float64}, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, stochastic::Bool=false)

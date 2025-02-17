@@ -33,7 +33,7 @@ Returns:
 - strat: SSxEE matrix representing the optimal strategy.
 
 """
-function optimize(dt0::DateTime, SS::Int)
+function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_time::Time)
     strat = zeros(Int64, SS-1, EE, FF, FF);
 
     # Construct dimensions
@@ -74,9 +74,9 @@ function optimize(dt0::DateTime, SS::Int)
 
         for mc in 1:mcdraws
             if mcdraws == 1
-                simustep = get_simustep_deterministic(dt1)
+                simustep = get_simustep_deterministic(dt1, drive_starts_time, park_starts_time)
             else
-                simustep = get_simustep_stochastic(dt1)
+                simustep = get_simustep_stochastic(dt1, drive_starts_time, park_starts_time)
             end
             # Note: We impose costs from soc-below vehicles, but do not adjust state because it pushes up plugged-in soc every period
             statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]),
@@ -107,18 +107,22 @@ end
 
 dt0 = DateTime("2023-07-17T12:00:00")
 mcdraws = 1
-@time strat, VV = optimize(dt0, SS);
+drive_starts_time = Dates.Time(7, 0, 0)
+park_starts_time = Dates.Time(17, 0, 0)
 
-df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5)
+@time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
+
+
+df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_starts_time, park_starts_time)
 benefits = sum(df[!, "valuep"])
 plot_standard(df)
 plot!(size=(700,400))
 savefig("version1-det.pdf")
 
 mcdraws = 100
-@time strat, VV = optimize(dt0, SS);
+@time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
 
-df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5)
+df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_starts_time, park_starts_time)
 benefits_sto = sum(df[!, "valuep"])
 plot_standard(df)
 plot!(size=(700,400))
@@ -133,8 +137,8 @@ for wp_above in range(0, 1., 5)
             global weight_portion_above = wp_above
             global weight_portion_below = wp_below
             global ratio_exponent = re
-            strat, VV = optimize(dt0, SS);
-            df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5)
+            strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
+            df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_starts_time, park_starts_time)
             push!(results, [weight_portion_above, weight_portion_below, ratio_exponent, sum(df.soc_plugged .* df.vehicles_plugged) / sum(df.vehicles_plugged)])
         end
     end

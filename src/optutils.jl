@@ -72,6 +72,10 @@ function asstate_float(tup::Tuple{Float64, Float64, Float64})
     (discrete_float(tup[1], 0., vehicles, EE), discrete_floatbelow(tup[2], soc_min, soc_max, FF), discrete_floatbelow(tup[3], soc_min, soc_max, FF))
 end
 
+function asstate_float(tup::Tuple{Float64, Float64, Float64, Time, Time})
+    (discrete_float(tup[1], 0., vehicles, EE), discrete_floatbelow(tup[2], soc_min, soc_max, FF), discrete_floatbelow(tup[3], soc_min, soc_max, FF))
+end
+
 """
 Floor the values in a tuple to convert them to integers.
 
@@ -154,6 +158,20 @@ Arguments:
 Returns:
 - Seven-element tuple consisting of base states, ceiling states, and transition probabilities.
 """
+function breakstate(tup::Tuple{Float64, Float64, Float64, Time, Time}) ## create one of these for the drive and park times
+    state = asstate_float(tup);
+    statebase = basestate(state);
+    stateceil1 = ceilstate(state, 1);
+    stateceil2 = ceilstate(state, 2);
+    stateceil3 = ceilstate(state, 3);
+
+    probbase1 = (stateceil1 - getstatedim(state, 1));
+    probbase2 = (stateceil2 - getstatedim(state, 2));
+    probbase3 = (stateceil3 - getstatedim(state, 3));
+
+    return statebase, stateceil1, probbase1, stateceil2, probbase2, stateceil3, probbase3
+end
+
 function breakstate(tup::Tuple{Float64, Float64, Float64})
     state = asstate_float(tup);
     statebase = basestate(state);
