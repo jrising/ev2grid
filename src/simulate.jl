@@ -125,20 +125,26 @@ function get_simustep_stochastic(dt1::DateTime, drive_starts_time, park_starts_t
     dt_9am = DateTime(date_part, drive_starts_time)
     dt_5pm = DateTime(date_part, park_starts_time)
 
-    if dt_5pm - periodstep(1) ≤ dt1 < dt_5pm && rand() < prob_delayed_return
-        return simustep_base
+    rand_delayed_return = rand()
+    rand_event_return = rand()
+    rand_event = rand()
+
+    if dt_5pm - periodstep(1) ≤ dt1 < dt_5pm && rand_delayed_return < prob_delayed_return
+        delayed_return = 1 ## the event caused a later return than anticipated?
+        return simustep_base, (delayed_return, 0, 0)
     end
-    if rand() < prob_event_return
+    if rand_event_return < prob_event_return
+        event_return = 1 ## the event caused a return 
         if dt_9am - periodstep(1) ≤ dt1 < dt_5pm - periodstep(1)
-            return simustep_alldrive
+            return simustep_alldrive, (0, event_return, 0)
         else
-            return simustep_allplug
+            return simustep_allplug, (0, event_return, 0)
         end
     end
-    if rand() < prob_event
-        vehicles_needed = sample(1:vehicles, Weights(prob_event_vehicles))
-        return (vehicles_plugged_1::Float64, vehicles_avail_1::Float64, soc_avail_1::Float64, soc_driving_1::Float64) -> simustep_event(vehicles_needed, vehicles_plugged_1, vehicles_avail_1, soc_avail_1, soc_driving_1)
+    if rand_event < prob_event
+        vehicles_needed = sample(1:vehicles, Weights(prob_event_vehicles)) ## the event caused a vehicle event?
+        return (vehicles_plugged_1::Float64, vehicles_avail_1::Float64, soc_avail_1::Float64, soc_driving_1::Float64) -> simustep_event(vehicles_needed, vehicles_plugged_1, vehicles_avail_1, soc_avail_1, soc_driving_1), (0, 0, vehicles_needed)
     end
 
-    return get_simustep_deterministic(dt1, drive_starts_time, park_starts_time)
+    return get_simustep_deterministic(dt1, drive_starts_time, park_starts_time), (0, 0, 0)
 end

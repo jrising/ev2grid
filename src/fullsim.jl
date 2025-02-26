@@ -21,7 +21,7 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
     vehicle_split = split_below(soc_plugged_1, soc_needed)
 
     for tt in 1:(SS-1)
-        dsoc = get_dsoc(tt, (vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time))
+        dsoc = get_dsoc(tt, (vehicles_plugged_1, soc_plugged_1, soc_driving_1))
         statebase, stateceil1, probbase1, stateceil2, probbase2, stateceil3, probbase3 = breakstate((vehicles_plugged_1, soc_plugged_1, soc_driving_1))
 
         dt1 = dt0 + periodstep(tt)
@@ -41,7 +41,7 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
 
         ## Apply simulation
         if stochastic
-            simustep = get_simustep_stochastic(dt1, drive_starts_time, park_starts_time)
+            simustep, (delayed_return, event_return, vehicles_needed) = get_simustep_stochastic(dt1, drive_starts_time, park_starts_time)
         else
             simustep = get_simustep_deterministic(dt1, drive_starts_time, park_starts_time)
         end
