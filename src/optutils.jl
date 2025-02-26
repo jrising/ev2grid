@@ -154,6 +154,7 @@ Arguments:
 Returns:
 - Seven-element tuple consisting of base states, ceiling states, and transition probabilities.
 """
+
 function breakstate(tup::Tuple{Float64, Float64, Float64})
     state = asstate_float(tup);
     statebase = basestate(state);
