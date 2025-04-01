@@ -1,5 +1,5 @@
 using Dates
-function get_dsoc(tt, state, drive_starts_time)
+function get_dsoc_thumbrule1(tt, state, drive_starts_time)
     vehicles_plugged_1, soc_plugged_1, soc_driving_1 = state
     dt1 = dt0 + periodstep(tt)
 

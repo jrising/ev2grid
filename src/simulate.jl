@@ -122,29 +122,27 @@ The function chooses between `simustep_alldrive`, `simustep_allplug`, or `simust
 """
 function get_simustep_stochastic(dt1::DateTime, drive_starts_time, park_starts_time)
     date_part = Dates.Date(dt1)
-    dt_9am = DateTime(date_part, drive_starts_time)
-    dt_5pm = DateTime(date_part, park_starts_time)
+    dt_drive_start = DateTime(date_part, drive_starts_time)
+    dt_park_start = DateTime(date_part, park_starts_time)
 
     rand_delayed_return = rand()
     rand_event_return = rand()
     rand_event = rand()
 
-    if dt_5pm - periodstep(1) ≤ dt1 < dt_5pm && rand_delayed_return < prob_delayed_return
-        delayed_return = 1 ## the event caused a later return than anticipated?
-        return simustep_base, (delayed_return, 0, 0)
+    if dt_park_start - periodstep(1) ≤ dt1 < dt_park_start && rand_delayed_return < prob_delayed_return
+        return simustep_base
     end
     if rand_event_return < prob_event_return
-        event_return = 1 ## the event caused a return 
-        if dt_9am - periodstep(1) ≤ dt1 < dt_5pm - periodstep(1)
-            return simustep_alldrive, (0, event_return, 0)
+        if dt_drive_start - periodstep(1) ≤ dt1 < dt_park_start - periodstep(1)
+            return simustep_alldrive
         else
-            return simustep_allplug, (0, event_return, 0)
+            return simustep_allplug
         end
     end
     if rand_event < prob_event
-        vehicles_needed = sample(1:vehicles, Weights(prob_event_vehicles)) ## the event caused a vehicle event?
-        return (vehicles_plugged_1::Float64, vehicles_avail_1::Float64, soc_avail_1::Float64, soc_driving_1::Float64) -> simustep_event(vehicles_needed, vehicles_plugged_1, vehicles_avail_1, soc_avail_1, soc_driving_1), (0, 0, vehicles_needed)
+        vehicles_needed = sample(1:vehicles, Weights(prob_event_vehicles))
+        return (vehicles_plugged_1::Float64, vehicles_avail_1::Float64, soc_avail_1::Float64, soc_driving_1::Float64) -> simustep_event(vehicles_needed, vehicles_plugged_1, vehicles_avail_1, soc_avail_1, soc_driving_1)
     end
 
-    return get_simustep_deterministic(dt1, drive_starts_time, park_starts_time), (0, 0, 0)
+    return get_simustep_deterministic(dt1, drive_starts_time, park_starts_time)
 end
