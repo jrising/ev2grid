@@ -41,7 +41,7 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
 
         ## Apply simulation
         if stochastic
-            simustep, (delayed_return, event_return, vehicles_needed) = get_simustep_stochastic(dt1, drive_starts_time, park_starts_time)
+            simustep = get_simustep_stochastic(dt1, drive_starts_time, park_starts_time)
         else
             simustep = get_simustep_deterministic(dt1, drive_starts_time, park_starts_time)
         end
