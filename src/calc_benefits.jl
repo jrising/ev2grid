@@ -1,21 +1,22 @@
 using DataFrames
 using Printf
+using Plots
 
-include("src/bizutils.jl")
-include("src/customer.jl")
-include("src/simulate.jl")
-include("src/retail.jl")
-include("src/config.jl")
-include("src/value.jl")
-include("src/optutils.jl")
-include("src/fullsim.jl")
-include("src/plotting.jl")
-include("src/thumbrule.jl")
-include("src/optfuncs.jl")
+include("bizutils.jl")
+include("customer.jl")
+include("simulate.jl")
+include("retail.jl")
+include("config.jl")
+include("value.jl")
+include("optutils.jl")
+include("fullsim.jl")
+include("plotting.jl")
+include("thumbrule.jl")
+include("optfuncs.jl")
 
 
 function run_rule_of_thumb_simulation(dt0, drive_starts_time, park_starts_time)
-    df = fullsimulate(dt0, (tt, state) -> get_dsoc(tt, state, drive_starts_time), (tt) -> 0., 0., 0.5, 0.5, drive_starts_time, park_starts_time)
+    df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time), (tt) -> 0., 0., 0.5, 0.5, drive_starts_time, park_starts_time)
     benefits = sum(df[!, "valuep"])
 
     return benefits
@@ -89,28 +90,100 @@ function export_to_latex_benefits_table(benefits_dict)
     end
 end
 
+function run_rule_of_thumb_stochastic_events_simulation(dt0, drive_starts_time, park_starts_time)
+    # global variable to track random events from stochastic simulation
+    global event_log = []
+
+    for ev in event_log
+        # Only consider events that occur within 1 hour (3600 seconds) of the current simulation time tt
+        if ev.event == :delayed_return
+            # For a delayed return, postpone park time by an hour
+            park_starts_time += Minute(60)
+        elseif ev.event == :emergency
+            # For emergency events, adjust drive start time based on how many vehicles are needed.
+            frac = ev.vehicles_needed / vehicles  # "vehicles" assumed to be the total available
+            ## adjust start time for these vehicles
+            drive_starts_time = ev.time
+            ## returns for these vehicles are increasingly probable with time
+            delay = Minute(round(60 * frac))
+            drive_starts_time += delay
+        end
+    end
+
+    
+    df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time), (tt) -> 0., 0., 0.5, 0.5, drive_starts_time, park_starts_time, true)
+    
+    benefits = sum(df[!, "valuep"])
+    
+    return benefits, event_log
+end
 
 
 SS = 36
 mcdraws = 100
 dt0 = DateTime("2023-07-17T12:00:00")
+drive_starts_time = Time(9, 0, 0)  # Example drive start time
+park_starts_time = Time(17, 0, 0)  # Example park start time
 
-test_start_times = [Time(7,0,0), Time(8,0,0), Time(9,0,0)]
-test_park_times = [Time(16,0,0), Time(17,0,0), Time(18,0,0)]
 
-benefits_dict = Dict{String, Dict{String, Tuple{Float64, Float64, Float64}}}()
+benefits_det = run_rule_of_thumb_simulation(dt0, drive_starts_time, park_starts_time)
+benefits, event_log = run_rule_of_thumb_stochastic_events_simulation(dt0, drive_starts_time, park_starts_time)
 
-for drive_starts_time in test_start_times
-    benefits_dict[string(drive_starts_time)] = Dict()
+test_start_times = [Time(h, 0, 0) for h in 0:23]
+test_park_times = [Time(h, 0, 0) for h in 0:23]
 
-    for park_starts_time in test_park_times
-        rule_benefits = run_rule_of_thumb_simulation(dt0, drive_starts_time, park_starts_time)
-        optimized_benefits = run_optimized_simulation(dt0, SS, drive_starts_time, park_starts_time)
-        stochastic_benefits = run_optimized_stochastic_simulation(dt0, SS, mcdraws, drive_starts_time, park_starts_time)
+# benefits_dict = Dict{String, Dict{String, Tuple{Float64, Float64, Float64}}}()
 
-        benefits_dict[string(drive_starts_time)][string(park_starts_time)] = (rule_benefits, optimized_benefits, stochastic_benefits)
+# for drive_starts_time in test_start_times
+#     benefits_dict[string(drive_starts_time)] = Dict()
+
+#     for park_starts_time in test_park_times
+#         rule_benefits = run_rule_of_thumb_simulation(dt0, drive_starts_time, park_starts_time)
+#         optimized_benefits = run_optimized_simulation(dt0, SS, drive_starts_time, park_starts_time)
+#         stochastic_benefits = run_optimized_stochastic_simulation(dt0, SS, mcdraws, drive_starts_time, park_starts_time)
+
+#         benefits_dict[string(drive_starts_time)][string(park_starts_time)] = (rule_benefits, optimized_benefits, stochastic_benefits)
+#     end
+# end
+
+# # Export to LaTeX
+# export_to_latex_benefits_table(benefits_dict)
+
+
+function plot_rule_of_thumb_benefits(dt0, test_start_times, test_park_times)
+    # Create a 24x24 matrix for benefits
+    benefit_matrix = zeros(Float64, 24, 24)  # rows: drive duration (0 to 23 hours), columns: drive start hour (0 to 23)
+    
+    for drive_start in test_start_times
+        for park_start in test_park_times
+            # Convert drive_start and park_start to DateTime using dt0's date
+            drive_dt = DateTime(year(dt0), month(dt0), day(dt0), hour(drive_start), minute(drive_start), second(drive_start))
+            park_dt = DateTime(year(dt0), month(dt0), day(dt0), hour(park_start), minute(park_start), second(park_start))
+            
+            # If park_dt is earlier than drive_dt, assume it's on the next day
+            if park_dt < drive_dt
+                park_dt += Dates.Day(1)
+            end
+            
+            # Compute driving duration in hours
+            duration = Int((park_dt - drive_dt) / Hour(1))
+            
+            # Compute the rule-of-thumb benefit for this combination
+            benefit = run_rule_of_thumb_simulation(dt0, drive_start, park_start)
+            
+            # Map the benefit to the matrix: column index = drive start hour, row index = duration
+            benefit_matrix[duration+1, hour(drive_start)+1] = benefit
+        end
     end
+    
+    # Create a heatmap with drive start time on the x-axis and driving duration on the y-axis
+    heatmap(0:23, 0:23, benefit_matrix,
+            xlabel = "Drive Start Time (Hour)",
+            ylabel = "Drive Duration (Hours)",
+            title = "Rule-of-Thumb Benefits",
+            colorbar_title = "Benefit")
 end
 
-# Export to LaTeX
-export_to_latex_benefits_table(benefits_dict)
+# Call the plotting function and save the heatmap
+plot_rule_of_thumb_benefits(dt0, test_start_times, test_park_times)
+savefig("benefits.png")

@@ -2,8 +2,7 @@ using Dates
 function get_dsoc_thumbrule1(tt, state, drive_starts_time)
     vehicles_plugged_1, soc_plugged_1, soc_driving_1 = state
     dt1 = dt0 + periodstep(tt)
-
-    dt_drive = DateTime(Dates.Date(dt1)+ Dates.Day(1), drive_starts_time)
+    dt_drive = DateTime(Dates.Date(dt1)+ Dates.Day(1), drive_starts_time) ## assumes you start driving the next day
     time_available = (dt_drive - dt1).value / 3600 / 1000 # in hours
 
     # Calculate floor SOC needed to ramp up to 80% by 9am

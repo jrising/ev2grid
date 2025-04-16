@@ -1,4 +1,5 @@
 using Dates, StatsBase
+global event_log = []
 
 ## Unexpected changes in vehicles
 prob_event = 0.01 # per hour, so 1 per 4 days
@@ -130,9 +131,11 @@ function get_simustep_stochastic(dt1::DateTime, drive_starts_time, park_starts_t
     rand_event = rand()
 
     if dt_park_start - periodstep(1) ≤ dt1 < dt_park_start && rand_delayed_return < prob_delayed_return
+        push!(event_log, (time = dt1, event = :delayed_return)) ## probability of a delayed return 
         return simustep_base
     end
-    if rand_event_return < prob_event_return
+    if rand_event_return < prob_event_return ## probability of each car returning after emergency or delay happens
+        push!(event_log, (time = dt1, event = :event_return))
         if dt_drive_start - periodstep(1) ≤ dt1 < dt_park_start - periodstep(1)
             return simustep_alldrive
         else
@@ -140,7 +143,8 @@ function get_simustep_stochastic(dt1::DateTime, drive_starts_time, park_starts_t
         end
     end
     if rand_event < prob_event
-        vehicles_needed = sample(1:vehicles, Weights(prob_event_vehicles))
+        vehicles_needed = sample(1:vehicles, Weights(prob_event_vehicles)) ## probability of an emergency requiring an uncertain number of vehicles
+        push!(event_log, (time = dt1, event = :emergency, vehicles_needed = vehicles_needed))
         return (vehicles_plugged_1::Float64, vehicles_avail_1::Float64, soc_avail_1::Float64, soc_driving_1::Float64) -> simustep_event(vehicles_needed, vehicles_plugged_1, vehicles_avail_1, soc_avail_1, soc_driving_1)
     end
 
