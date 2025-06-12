@@ -30,7 +30,9 @@ mcdraws = 1
 drive_starts_time = Dates.Time(9, 0, 0)
 park_starts_time = Dates.Time(17, 0, 0)
 
-@time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
+@time strat, VVall = optimize(dt0, SS, drive_starts_time, park_starts_time);
+
+Plots.heatmap(transpose(VVall[:, 5, :, 5]))
 
 
 df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_starts_time, park_starts_time)

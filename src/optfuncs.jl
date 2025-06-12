@@ -1,5 +1,12 @@
+include("bizutils.jl")
+include("value.jl")
+include("retail.jl")
+include("optutils.jl")
+include("simulate.jl")
+
 function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_time::Time)
     strat = zeros(Int64, SS-1, EE, FF, FF);
+    VVall = zeros(Float64, SS, EE, FF, FF);
 
     # Construct dimensions
     soc_range = [0.; range(soc_min, soc_max, FF-1)];
@@ -17,6 +24,7 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
     vehicle_split = split_below.(soc_range, soc_needed)
     value_energy_bysoc = [value_energy(vehicle_split[ff][1], vehicle_split[ff][3], soc_needed, vehicles_plugged_range[ee]) for ee=1:EE, ff=1:FF]
     VV2 = repeat(reshape(value_energy_bysoc, EE, FF, 1), 1, 1, FF)
+    VVall[end, :, :, :] = VV2
 
     # STEP 2: Determine optimal action for t = S-1 and back
     for tt in (SS-1):-1:1
@@ -65,7 +73,8 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
 
         VV2 = VV1byact[bestact]
         VV2[isnan.(VV2)] .= -Inf
+        VVall[tt, :, :, :] = VV2
     end
 
-    return strat, VV2
+    return strat, VVall
 end

@@ -55,6 +55,13 @@ prescribed level (`soc_needed`). Assumes the fleet follows a truncated normal di
   3. Energy fraction for the high-power portion of the fleet.
 """
 function split_below(soc_plugged::Float64, soc_needed::Float64)
+    if soc_dispersion == 0.
+        if soc_plugged ≥ soc_needed
+            return 0.0, soc_needed, soc_plugged
+        else
+            return 1.0, soc_plugged, soc_needed
+        end
+    end
     # Limits come from truncated(Normal(mu, 0.05), lower=0., upper=1.)
     if soc_plugged ≤ 0.03989422804014327
         return 1.0, 0.0, soc_needed
@@ -63,9 +70,9 @@ function split_below(soc_plugged::Float64, soc_needed::Float64)
     end
     ## Use normal distribution, so I can calculate means of truncated
     # Need to get a truncated normal with the desired mean
-    f(mu) = mean(truncated(Normal(mu, 0.05), lower=0., upper=1.)) - soc_plugged
+    f(mu) = mean(truncated(Normal(mu, soc_dispersion), lower=0., upper=1.)) - soc_plugged
     mu = find_zero(f, (0., 1.))
-    dist = truncated(Normal(mu, 0.05), lower=0., upper=1.)
+    dist = truncated(Normal(mu, soc_dispersion), lower=0., upper=1.)
     portion_below = cdf(dist, soc_needed)
     portion_below, mean(truncated(dist, upper=soc_needed)), mean(truncated(dist, lower=soc_needed))
 end

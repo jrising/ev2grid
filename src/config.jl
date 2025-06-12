@@ -18,6 +18,9 @@ PP = 11 # discretized power choices (including no-change action)
 EE = 5 # 0 - 4 cars
 FF = 11 # For both soc_plugged and soc_driving, 0 - 1
 
+## Dispersion around average SOC
+soc_dispersion = 0.
+
 ## Checks on configuration parameters
 
 @argcheck mcdraws > 0

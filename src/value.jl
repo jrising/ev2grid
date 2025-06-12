@@ -7,7 +7,7 @@ weight_portion_above = 0.05
 weight_portion_below = 0.1
 ratio_exponent = 0.5
 
-pricedf = CSV.read("predprice.csv", DataFrame)
+pricedf = CSV.read(joinpath(@__DIR__, "../data/predprice.csv"), DataFrame)
 pricedf[!, :datetime] = DateTime.(replace.(pricedf.datetime, " " => "T"))
 
 """
