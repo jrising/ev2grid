@@ -1,5 +1,4 @@
 using Dates, StatsBase
-global event_log = []
 
 ## Unexpected changes in vehicles
 prob_event = 0.01 # per hour, so 1 per 4 days
@@ -131,14 +130,15 @@ function get_simustep_stochastic(dt1::DateTime, drive_starts_time, park_starts_t
     rand_event = rand()
 
     if dt_park_start - periodstep(1) ≤ dt1 < dt_park_start && rand_delayed_return < prob_delayed_return
-        push!(event_log, (time = dt1, event = :delayed_return)) ## probability of a delayed return 
+        push!(event_log, (time = dt1, event = :delayed_return, vehicles_affected = vehicles)) ## if there is a delayed return right before cars are about to park, simulate a base step
         return simustep_base
     end
-    if rand_event_return < prob_event_return ## probability of each car returning after emergency or delay happens
-        push!(event_log, (time = dt1, event = :event_return))
+    if rand_event_return < prob_event_return ## this is like a common event that makes everyone stay out longer or plug in at the same time
         if dt_drive_start - periodstep(1) ≤ dt1 < dt_park_start - periodstep(1)
+            push!(event_log, (time = dt1, event = :alldrive, vehicles_affected = vehicles))
             return simustep_alldrive
         else
+            push!(event_log, (time = dt1, event = :allplug, vehicles_affected = vehicles))
             return simustep_allplug
         end
     end

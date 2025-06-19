@@ -1,4 +1,5 @@
 function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_time::Time)
+    global event_log = [] ## clear out event_log before optimizing
     strat = zeros(Int64, SS-1, EE, FF, FF);
 
     # Construct dimensions

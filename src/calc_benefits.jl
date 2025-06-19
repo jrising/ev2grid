@@ -37,9 +37,15 @@ function run_optimized_stochastic_simulation(dt0, SS, mcdraws, drive_starts_time
     @time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
     
     df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_starts_time, park_starts_time, true)
-    benefits = sum(df[!, "valuep"])
-
-    return benefits
+    benefits = sum(df[!, "valuep"]) ## conduct a single run for a simulation with stochastic events
+    
+    # open("event_log_debug.txt", "w") do io ## to help with debugging print out event_log
+    #     for ev in event_log
+    #         println(io, ev)
+    #     end
+    # end
+    
+    return benefits, strat
 end
 
 
@@ -90,32 +96,29 @@ function export_to_latex_benefits_table(benefits_dict)
     end
 end
 
-function run_rule_of_thumb_stochastic_events_simulation(dt0, drive_starts_time, park_starts_time)
-    # global variable to track random events from stochastic simulation
-    global event_log = []
-
-    for ev in event_log
-        # Only consider events that occur within 1 hour (3600 seconds) of the current simulation time tt
-        if ev.event == :delayed_return
-            # For a delayed return, postpone park time by an hour
-            park_starts_time += Minute(60)
-        elseif ev.event == :emergency
-            # For emergency events, adjust drive start time based on how many vehicles are needed.
-            frac = ev.vehicles_needed / vehicles  # "vehicles" assumed to be the total available
-            ## adjust start time for these vehicles
-            drive_starts_time = ev.time
-            ## returns for these vehicles are increasingly probable with time
-            delay = Minute(round(60 * frac))
-            drive_starts_time += delay
-        end
+function run_rule_of_thumb_stochastic_events_simulation(dt0, strat, mcdraws, drive_starts_time, park_starts_time)
+    # global event_log = [] ## to help with debugging read in previously printed out event_log
+    # open("event_log_debug.txt", "r") do io
+    #     for line in eachline(io)
+    #         push!(event_log, eval(Meta.parse(line)))
+    #     end 
+    # end 
+    benefits_list_optimized = [] 
+    benefits_list_rot = []
+    for mc in mcdraws
+        ## first simulate stochastic events and calculate 
+        df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_starts_time, park_starts_time)
+        benefits_stoch = sum(df[!, "valuep"])
+        push!(benefits_list_optimized, benefits_stoch)        
+        # pass events from event_log into rule of thumb simulation
+        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time), (tt) -> 0., 0., 0.5, 0.5, drive_starts_time, park_starts_time)
+        benefits_rot = sum(df[!, "valuep"])
+        push!(benefits_list_rot, benefits_rot)    
     end
+    mean_benefits_optimized = mean(benefits_list_optimized)
+    mean_benefits_rot = mean(benefits_list_rot)
 
-    
-    df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time), (tt) -> 0., 0., 0.5, 0.5, drive_starts_time, park_starts_time, true)
-    
-    benefits = sum(df[!, "valuep"])
-    
-    return benefits, event_log
+    return mean_benefits_optimized, mean_benefits_rot
 end
 
 
@@ -126,28 +129,35 @@ drive_starts_time = Time(9, 0, 0)  # Example drive start time
 park_starts_time = Time(17, 0, 0)  # Example park start time
 
 
-benefits_det = run_rule_of_thumb_simulation(dt0, drive_starts_time, park_starts_time)
-benefits, event_log = run_rule_of_thumb_stochastic_events_simulation(dt0, drive_starts_time, park_starts_time)
+# First, run the stochastic simulation to develop strategy for charging with stochastic events
+benefits_stoch, strat = run_optimized_stochastic_simulation(dt0, SS, mcdraws, drive_starts_time, park_starts_time)
 
+# Then, run a bunch of simulations to calculate mean benefits under optimal strategy and rule of thumb with events
+mean_benefits_optimized, mean_benefits_rot = run_rule_of_thumb_stochastic_events_simulation(dt0, strat, mcdraws, drive_starts_time, park_starts_time)
+
+println("Stochastic Optimized Benefits mean: ", mean_benefits_optimized)
+println("Stochastic Rule of Thumb Benefits mean: ", mean_benefits_rot)
+
+
+## create heat map of value for parking and starting driving at different times
 test_start_times = [Time(h, 0, 0) for h in 0:23]
 test_park_times = [Time(h, 0, 0) for h in 0:23]
 
-# benefits_dict = Dict{String, Dict{String, Tuple{Float64, Float64, Float64}}}()
+benefits_dict = Dict{String, Dict{String, Tuple{Float64, Float64}}}()
 
-# for drive_starts_time in test_start_times
-#     benefits_dict[string(drive_starts_time)] = Dict()
+for drive_starts_time in test_start_times
+    benefits_dict[string(drive_starts_time)] = Dict()
 
-#     for park_starts_time in test_park_times
-#         rule_benefits = run_rule_of_thumb_simulation(dt0, drive_starts_time, park_starts_time)
-#         optimized_benefits = run_optimized_simulation(dt0, SS, drive_starts_time, park_starts_time)
-#         stochastic_benefits = run_optimized_stochastic_simulation(dt0, SS, mcdraws, drive_starts_time, park_starts_time)
+    for park_starts_time in test_park_times
+        rule_benefits = run_rule_of_thumb_simulation(dt0, drive_starts_time, park_starts_time)
+        optimized_benefits = run_optimized_simulation(dt0, SS, drive_starts_time, park_starts_time)
 
-#         benefits_dict[string(drive_starts_time)][string(park_starts_time)] = (rule_benefits, optimized_benefits, stochastic_benefits)
-#     end
-# end
+        benefits_dict[string(drive_starts_time)][string(park_starts_time)] = (rule_benefits, optimized_benefits)
+    end
+end
 
-# # Export to LaTeX
-# export_to_latex_benefits_table(benefits_dict)
+# Export to LaTeX
+export_to_latex_benefits_table(benefits_dict)
 
 
 function plot_rule_of_thumb_benefits(dt0, test_start_times, test_park_times)
