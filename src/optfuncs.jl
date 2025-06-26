@@ -5,6 +5,7 @@ include("optutils.jl")
 include("simulate.jl")
 
 function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_time::Time)
+    ## vehicles_plugged, soc_plugged, soc_driving
     strat = zeros(Int64, SS-1, EE, FF, FF);
     VVall = zeros(Float64, SS, EE, FF, FF);
 
@@ -32,11 +33,12 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
 
         dt1 = dt0 + periodstep(tt)
         price = get_retail_price(dt1)
-        valuep = [value_power_action(price, dsoc[pp, ee, ff1, ff2], vehicles_plugged_range[ee]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+        valuep = [value_power_action(price, dsoc[pp, ee, ff1, ff2], vehicle_split[ff1][1], vehicles_plugged_range[ee]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
         soc_needed = soc_scheduled(dt1)
         vehicle_split = split_below.(soc_range, soc_needed);
         valuepns = [value_power_newstate(price, vehicle_split[ff12][1], soc_needed - vehicle_split[ff12][2], vehicles_plugged_range[ee]) for ee=1:EE, ff12=1:FF];
+        vehicle_split = split_below.(soc_range, soc_needed);
         valuee = [value_energy(vehicle_split[ff12][1], vehicle_split[ff12][3], soc_needed, vehicles_plugged_range[ee]) for ee=1:EE, ff12=1:FF];
 
         ff12_byaction = discrete_roundbelow.(soc1_byaction, soc_min, soc_max, FF);

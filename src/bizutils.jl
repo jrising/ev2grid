@@ -22,10 +22,10 @@ function make_actions(soc0::Float64, soc_preferred::Vector{Float64})
         soc_diff = soc_preferred .- soc0
 
         if any(soc_diff .> fracpower_max * timestep)
-            soc_diff[soc_diff .> fracpower_max * timestep] .= maximum(soc_diff[soc_diff .< fracpower_max * timestep])
+            soc_diff[soc_diff .> fracpower_max * timestep] .= fracpower_max * timestep
         end
         if any(soc_diff .< fracpower_min * timestep)
-            soc_diff[soc_diff .< fracpower_min * timestep] .= minimum(soc_diff[soc_diff .> fracpower_min * timestep])
+            soc_diff[soc_diff .< fracpower_min * timestep] .= fracpower_min * timestep
         end
         return soc_diff
     else
@@ -99,7 +99,7 @@ function adjust_below(tup::Tuple{Float64, Float64, Float64}, soc_below::Float64,
     @assert vehicles_plugged ≤ vehicles + 1e-8
 
     if vehicles_plugged > 0
-        soc_plugged = (soc_below * vehicles_below + tup[2] * tup[1]) / vehicles_plugged
+        soc_plugged = ((soc_below + timestep * fracpower_max) * vehicles_below + tup[2] * tup[1]) / vehicles_plugged
     else
         soc_plugged = tup[2]
     end
