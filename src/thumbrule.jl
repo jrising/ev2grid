@@ -2,7 +2,13 @@ using Dates
 function get_dsoc_thumbrule1(tt, state, drive_starts_time)
     vehicles_plugged_1, soc_plugged_1, soc_driving_1 = state
     dt1 = dt0 + periodstep(tt)
-    dt_drive = DateTime(Dates.Date(dt1)+ Dates.Day(1), drive_starts_time) ## assumes you start driving the next day
+    ## find when the users start to drive
+    if drive_starts_time < Dates.Time(dt1)
+        dt_drive = DateTime(Dates.Date(dt1)+ Dates.Day(1), drive_starts_time) ## assumes you start driving the next day
+    else
+        dt_drive = DateTime(Dates.Date(dt1), drive_starts_time) ## assumes you start driving later that day
+    end 
+
     time_available = (dt_drive - dt1).value / 3600 / 1000 # in hours
 
     # Calculate floor SOC needed to ramp up to 80% by 9am
@@ -26,6 +32,8 @@ function get_dsoc_thumbrule1(tt, state, drive_starts_time)
         end
     end
          
+    soc_goal = 0.8 ## if nothing else set to 80% 
+
     if is_peak(dt1) && SOC_floor <= soc_plugged_1 && price_switch
         soc_goal = SOC_floor # Discharge if peak price, above floor, and price change coming
     elseif !is_peak(dt1)
@@ -37,3 +45,10 @@ function get_dsoc_thumbrule1(tt, state, drive_starts_time)
 
     return max(min(soc_goal - soc_plugged_1, timestep * fracpower_max), timestep * fracpower_min)
 end
+
+function get_dsoc_thumbrule_baseline(tt,state,drive_starts_time)
+    vehicles_plugged_1, soc_plugged_1, soc_driving_1 = state
+    dt1 = dt0 + periodstep(tt)
+    soc_goal = 0.8
+    return max(min(soc_goal - soc_plugged_1, timestep * fracpower_max), timestep * fracpower_min)
+end 
