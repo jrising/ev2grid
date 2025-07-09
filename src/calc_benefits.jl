@@ -117,10 +117,11 @@ function run_rule_of_thumb_stochastic_events_simulation(dt0, strat, mcdraws, dri
         benefits_stoch = sum(df[!, "valuep"])
         push!(benefits_list_optimized, benefits_stoch)
         # pass events from event_log into rule of thumb simulation
-        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time), (tt) -> 0., 0., 0.5, 0.5, drive_starts_time, park_starts_time)
+        events = event_log
+        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time), (tt) -> 0., 0., 0.5, 0.5, drive_starts_time, park_starts_time; events=events)
         benefits_rot = sum(df[!, "valuep"])
         push!(benefits_list_rot, benefits_rot)
-        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule_baseline(tt, state, drive_starts_time), (tt) -> 0., 0., 0.5, 0.5, drive_starts_time, park_starts_time)
+        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule_baseline(tt, state, drive_starts_time), (tt) -> 0., 0., 0.5, 0.5, drive_starts_time, park_starts_time; events=events)
         benefits_rot_baseline = sum(df[!, "valuep"])
         push!(benefits_list_rot_baseline, benefits_rot_baseline)
 

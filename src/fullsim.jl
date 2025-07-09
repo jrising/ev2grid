@@ -128,7 +128,10 @@ function fullsimulate_modify(dt0::DateTime, strat::AbstractArray{Int}, changes::
     fullsimulate(dt0, get_dsoc, tt -> regrange[tt], vehicles_plugged_1, soc_plugged_1, soc_driving_1, stochastic)
 end
 
-function fullsimulate_with_events(dt0::DateTime, get_dsoc::Function, get_regrange::Function, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, drive_starts_time::Time, park_starts_time::Time)
-    fullsimulate(dt0, get_dsoc, get_regrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time, events=event_log)
+function fullsimulate_with_events(dt0::DateTime, get_dsoc::Function, get_regrange::Function, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, drive_starts_time::Time, park_starts_time::Time; events::Any=nothing)
+    if events === nothing
+        events = event_log
+    end
+    fullsimulate(dt0, get_dsoc, get_regrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time, events=events)
 end
 

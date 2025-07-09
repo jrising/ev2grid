@@ -1,4 +1,4 @@
-include("src/calc_benefits.jl")
+include("../src/calc_benefits.jl")
 
 SS = 36
 mcdraws = 100
