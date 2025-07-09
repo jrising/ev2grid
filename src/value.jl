@@ -7,7 +7,7 @@ weight_portion_above = 0.05
 weight_portion_below = 0.1
 ratio_exponent = 0.5
 
-pricedf = CSV.read("predprice.csv", DataFrame)
+pricedf = CSV.read(joinpath(@__DIR__, "../data/predprice.csv"), DataFrame)
 pricedf[!, :datetime] = DateTime.(replace.(pricedf.datetime, " " => "T"))
 
 """
@@ -45,14 +45,18 @@ Returns:
 
 Note: Ensure `vehicle_capacity`, `vehicles`, and `efficiency` are defined in the scope where this function is used.
 """
-function value_power_action(price::Float64, dsoc::Float64, vehicles_plugged::Float64)
-    denergy = dsoc * vehicle_capacity * vehicles_plugged # charging - discharging in terms of kWh
-
-    if denergy > 0
-        -price * denergy / efficiency # cost of energy
+function value_power_action(price::Float64, dsoc::Float64, portion_below::Float64, vehicles_plugged::Float64)
+    # charging and discharging in terms of kWh
+    if dsoc > 0
+        charging = (dsoc * (1 - portion_below) + timestep * fracpower_max * portion_below) * vehicle_capacity * vehicles_plugged
+        discharging = 0.
     else
-        -price * denergy # payment for energy
+        charging = timestep * fracpower_max * portion_below * vehicle_capacity * vehicles_plugged
+        discharging = -dsoc * (1 - portion_below) * vehicle_capacity * vehicles_plugged
     end
+
+    # payment for energy - cost of energy
+    price * discharging - price * charging / efficiency
 end
 
 """

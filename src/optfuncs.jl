@@ -1,6 +1,14 @@
+include("bizutils.jl")
+include("value.jl")
+include("retail.jl")
+include("optutils.jl")
+include("simulate.jl")
+
 function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_time::Time)
     global event_log = [] ## clear out event_log before optimizing
+    ## vehicles_plugged, soc_plugged, soc_driving
     strat = zeros(Int64, SS-1, EE, FF, FF);
+    VVall = zeros(Float64, SS, EE, FF, FF);
 
     # Construct dimensions
     soc_range = [0.; range(soc_min, soc_max, FF-1)];
@@ -18,6 +26,7 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
     vehicle_split = split_below.(soc_range, soc_needed)
     value_energy_bysoc = [value_energy(vehicle_split[ff][1], vehicle_split[ff][3], soc_needed, vehicles_plugged_range[ee]) for ee=1:EE, ff=1:FF]
     VV2 = repeat(reshape(value_energy_bysoc, EE, FF, 1), 1, 1, FF)
+    VVall[end, :, :, :] = VV2
 
     # STEP 2: Determine optimal action for t = S-1 and back
     for tt in (SS-1):-1:1
@@ -25,11 +34,12 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
 
         dt1 = dt0 + periodstep(tt)
         price = get_retail_price(dt1)
-        valuep = [value_power_action(price, dsoc[pp, ee, ff1, ff2], vehicles_plugged_range[ee]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+        valuep = [value_power_action(price, dsoc[pp, ee, ff1, ff2], vehicle_split[ff1][1], vehicles_plugged_range[ee]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
         soc_needed = soc_scheduled(dt1)
         vehicle_split = split_below.(soc_range, soc_needed);
         valuepns = [value_power_newstate(price, vehicle_split[ff12][1], soc_needed - vehicle_split[ff12][2], vehicles_plugged_range[ee]) for ee=1:EE, ff12=1:FF];
+        vehicle_split = split_below.(soc_range, soc_needed);
         valuee = [value_energy(vehicle_split[ff12][1], vehicle_split[ff12][3], soc_needed, vehicles_plugged_range[ee]) for ee=1:EE, ff12=1:FF];
 
         ff12_byaction = discrete_roundbelow.(soc1_byaction, soc_min, soc_max, FF);
@@ -66,7 +76,8 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
 
         VV2 = VV1byact[bestact]
         VV2[isnan.(VV2)] .= -Inf
+        VVall[tt, :, :, :] = VV2
     end
 
-    return strat, VV2
+    return strat, VVall
 end

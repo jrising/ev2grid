@@ -24,16 +24,23 @@ include("src/fullsim.jl")
 include("src/plotting.jl")
 include("src/optfuncs.jl")
 
+soc_dispersion = 0.05
 
-dt0 = DateTime("2023-07-17T12:00:00")
+dt0 = DateTime("2023-07-17T00:00:00")
 mcdraws = 1
 drive_starts_time = Dates.Time(9, 0, 0)
 park_starts_time = Dates.Time(17, 0, 0)
 
-@time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
+@time strat, VVall = optimize(dt0, SS, drive_starts_time, park_starts_time);
 
+hourly_ticks = collect(DateTime("2023-07-17T00:00:00"):Hour(1):DateTime("2023-07-18T11:00:00"))
+six_hour_ticks = hourly_ticks[1:6:length(hourly_ticks)]
+hour_labels = string.(hour.(six_hour_ticks))
+Plots.heatmap(transpose(max.(VVall[:, 5, :, 5], -10)); xticks = (1:6:length(hourly_ticks), hour_labels))
 
-df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_starts_time, park_starts_time)
+Plots.heatmap(transpose(max.(strat[:, 5, :, 5], -10)); xticks = (1:6:length(hourly_ticks), hour_labels))
+
+df = fullsimulate(dt0, strat, zeros(SS-1), 4., 0.5, 0.5, drive_starts_time, park_starts_time)
 benefits = sum(df[!, "valuep"])
 plot_standard(df)
 plot!(size=(700,400))
@@ -42,7 +49,9 @@ savefig("version1-det.pdf")
 mcdraws = 100
 @time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
 
-df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_starts_time, park_starts_time)
+Plots.heatmap(transpose(max.(VV[:, 5, :, 5], -10)); xticks = (1:6:length(hourly_ticks), hour_labels))
+
+df = fullsimulate(dt0, strat, zeros(SS-1), 4., 0.5, 0.5, drive_starts_time, park_starts_time)
 benefits_sto = sum(df[!, "valuep"])
 plot_standard(df)
 plot!(size=(700,400))

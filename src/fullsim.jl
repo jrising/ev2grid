@@ -16,6 +16,7 @@ Simulates the energy fraction of vehicles while applying a given changes in ener
 """
 function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function, vehicles_plugged_1::Float64, soc_plugged_1::Float64, soc_driving_1::Float64, drive_starts_time::Time, park_starts_time::Time, stochastic::Bool=false)
     global event_log = [] ## clear out event_log before simulating
+    ## vehicles_plugged_1, soc_plugged_1, soc_driving_1 = 0., 0.5, 0.5 # debugging
     rows = Tuple{DateTime, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Union{Missing, Float64}, Union{Missing, Tuple{Int, Int, Int}}, Float64, Float64, Float64, Float64}[]
 
     soc_needed = soc_scheduled(dt0 + periodstep(1))
@@ -27,7 +28,8 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
 
         dt1 = dt0 + periodstep(tt)
         price = get_retail_price(dt1)
-        valuep = value_power_action(price, dsoc, vehicles_plugged_1)
+
+        valuep = value_power_action(price, dsoc, vehicle_split[1], vehicles_plugged_1)
         valuepns = value_power_newstate(price, vehicle_split[1], soc_needed - vehicle_split[2], vehicles_plugged_1)
         valuee = value_energy(vehicle_split[1], vehicle_split[3], soc_needed, vehicles_plugged_1)
 
@@ -63,15 +65,16 @@ function fullsimulate(dt0::DateTime, strat::AbstractArray{Int}, regrange::Vector
     function get_dsoc(tt, state)
         # Determine action for this period
         soc_range = [0.; range(soc_min, soc_max, FF-1)];
-        dsoc = make_actions(state[2], soc_range)
 
         statebase, stateceil1, probbase1, stateceil2, probbase2, stateceil3, probbase3 = breakstate(state)
+        dsoc_base = make_actions(soc_range[statebase[2]], soc_range)
+        dsoc_ceil = make_actions(soc_range[stateceil2], soc_range)
 
         ppbase = strat[tt, statebase...]
         ppceil1 = strat[tt, makeindex1(statebase, stateceil1)]
         ppceil2 = strat[tt, makeindex2(statebase, stateceil2)]
         ppceil3 = strat[tt, makeindex3(statebase, stateceil3)]
-        dsoc_pp = ((probbase1 + probbase2 + probbase3) .* dsoc[ppbase] + (1 .- probbase1) .* dsoc[ppceil1] + (1 .- probbase2) .* dsoc[ppceil2] + (1 .- probbase3) .* dsoc[ppceil3]) / 3;
+        dsoc_pp = ((probbase1 + probbase2 + probbase3) .* dsoc_base[ppbase] + (1 .- probbase1) .* dsoc_ceil[ppceil1] + (1 .- probbase2) .* dsoc_ceil[ppceil2] + (1 .- probbase3) .* dsoc_ceil[ppceil3]) / 3;
 
         dsoc_pp
     end

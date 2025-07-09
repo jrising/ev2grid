@@ -22,10 +22,10 @@ function make_actions(soc0::Float64, soc_preferred::Vector{Float64})
         soc_diff = soc_preferred .- soc0
 
         if any(soc_diff .> fracpower_max * timestep)
-            soc_diff[soc_diff .> fracpower_max * timestep] .= maximum(soc_diff[soc_diff .< fracpower_max * timestep])
+            soc_diff[soc_diff .> fracpower_max * timestep] .= fracpower_max * timestep
         end
         if any(soc_diff .< fracpower_min * timestep)
-            soc_diff[soc_diff .< fracpower_min * timestep] .= minimum(soc_diff[soc_diff .> fracpower_min * timestep])
+            soc_diff[soc_diff .< fracpower_min * timestep] .= fracpower_min * timestep
         end
         return soc_diff
     else
@@ -55,6 +55,13 @@ prescribed level (`soc_needed`). Assumes the fleet follows a truncated normal di
   3. Energy fraction for the high-power portion of the fleet.
 """
 function split_below(soc_plugged::Float64, soc_needed::Float64)
+    if soc_dispersion == 0.
+        if soc_plugged ≥ soc_needed
+            return 0.0, soc_needed, soc_plugged
+        else
+            return 1.0, soc_plugged, soc_needed
+        end
+    end
     # Limits come from truncated(Normal(mu, 0.05), lower=0., upper=1.)
     if soc_plugged ≤ 0.03989422804014327
         return 1.0, 0.0, soc_needed
@@ -63,9 +70,9 @@ function split_below(soc_plugged::Float64, soc_needed::Float64)
     end
     ## Use normal distribution, so I can calculate means of truncated
     # Need to get a truncated normal with the desired mean
-    f(mu) = mean(truncated(Normal(mu, 0.05), lower=0., upper=1.)) - soc_plugged
+    f(mu) = mean(truncated(Normal(mu, soc_dispersion), lower=0., upper=1.)) - soc_plugged
     mu = find_zero(f, (0., 1.))
-    dist = truncated(Normal(mu, 0.05), lower=0., upper=1.)
+    dist = truncated(Normal(mu, soc_dispersion), lower=0., upper=1.)
     portion_below = cdf(dist, soc_needed)
     portion_below, mean(truncated(dist, upper=soc_needed)), mean(truncated(dist, lower=soc_needed))
 end
@@ -92,7 +99,7 @@ function adjust_below(tup::Tuple{Float64, Float64, Float64}, soc_below::Float64,
     @assert vehicles_plugged ≤ vehicles + 1e-8
 
     if vehicles_plugged > 0
-        soc_plugged = (soc_below * vehicles_below + tup[2] * tup[1]) / vehicles_plugged
+        soc_plugged = ((soc_below + timestep * fracpower_max) * vehicles_below + tup[2] * tup[1]) / vehicles_plugged
     else
         soc_plugged = tup[2]
     end
