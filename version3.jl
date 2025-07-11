@@ -68,7 +68,7 @@ function optimize(dt0::DateTime, regrange::Vector{Float64})
 
         dt1 = dt0 + periodstep(tt)
         price = get_retail_price(dt1)
-        valuep = [value_power_action(price, dsoc[pp, ee, ff1, ff2], vehicles_plugged_range[ee]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF]
+        valuep = [value_power_action(price, dsoc[pp, ee, ff1, ff2], vehicle_split[ff1][1], vehicles_plugged_range[ee]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF]
 
         soc_needed = soc_scheduled(dt1)
         vehicle_split = split_below.(soc_range, soc_needed)

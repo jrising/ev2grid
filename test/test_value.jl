@@ -19,8 +19,8 @@ end
 
 # Unit tests for value_power_action function
 @testset "Test value_power_action function" begin
-    @test value_power_action(5.0, 0.1, vehicles) ≈ -5.0 * (0.1 * vehicle_capacity * vehicles) / efficiency
-    @test value_power_action(5.0, -0.1, vehicles) ≈ 5.0 * (-0.1 * vehicle_capacity * vehicles)
+    @test value_power_action(5.0, 0.1, 0, vehicles) ≈ -5.0 * (0.1 * vehicle_capacity * vehicles) / efficiency
+    @test value_power_action(5.0, -0.1, 0, vehicles) ≈ 5.0 * (-0.1 * vehicle_capacity * vehicles)
 end
 
 # Unit tests for value_power_newstate function
