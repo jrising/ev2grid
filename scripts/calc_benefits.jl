@@ -56,6 +56,64 @@ end
 # Export to LaTeX
 # export_to_latex_benefits_table(benefits_dict)
 
+## July 7 plot of time (midnight to midnight) against drive time with colors as SOC 
+# benefit_matrix = fill(NaN, 24, 24)  # rows: drive duration (0 to 23 hours), columns: drive start hour (0 to 23)
+test_start_times = [Time(h, 0, 0) for h in 0:23]
+number_vehicles = EE - 1
+
+# soc_matrix = fill(NaN, 24, 36)
+
+# for drive_start in test_start_times 
+#     park_time = Time(mod(hour(drive_start) + 8, 24), 0, 0) ## Always drive for 8 hours
+#     @time strat, VV = optimize(dt0, SS, drive_start, park_time);
+
+#     df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_start, park_time)
+#     df[!, "number_vehicles"] .= number_vehicles
+#     soc = ((df[!, "number_vehicles"] .- df[!, "vehicles_plugged"]).*df[!, "soc_driving"] .+ df[!,"vehicles_plugged"].*df[!,"soc_plugged"]) ./ number_vehicles
+#     time = df[!, "datetime"]
+#     for (i, t) in enumerate(time)
+#         soc_matrix[hour(drive_start)+1, i] = soc[i]
+#     end
+# end 
+
+using Serialization
+
+# write it out
+# open("soc_matrix.bin", "w") do io
+#     serialize(io, soc_matrix)
+# end
+
+io = open("soc_matrix.bin", "r")
+soc_matrix = deserialize(io)
+close(io)
+
+# heatmap(0:35, 0:23, soc_matrix,
+
+heatmap(0:23, 0:23, soc_matrix[:, 1:end-12],
+        xlabel = "Time (Midnight to Midnight)",
+        ylabel = "Drive Start Time (Hour)",
+        title = "Optimized Strategy",
+        colorbar_title = "SOC",
+        aspect_ratio = 1,
+        c=:viridis, 
+        xlims=(0,23), 
+        ylims=(0,23))
+# vline!([8], ymin=0, ymax=1, linestyle = :dash, color = :red, linewidth = 1.5, label = nothing)
+# hline!([1], xmin=0, xmax=8, linestyle = :dash, color = :red, linewidth = 1.5, label = nothing)
+for p in 0:23
+    if p < 16
+        plot!(rectangle(8, 1, p, p), fill=false, label=nothing, linewidth=2, color=:black, fillcolor=nothing)
+    else 
+        plot!(rectangle(24-p, 1, p, p), fill=false, label=nothing, linewidth=2, color=:black, fillcolor=nothing)
+        plot!(rectangle(p - 16, 1, 0, p), fill=false, label=nothing, linewidth=2, color=:black, fillcolor=nothing)
+    end
+end
+vline!([12, 20], linestyle = :dash, color = :red, linewidth = 1.5, label = nothing)
+hline!([12, 20], linestyle = :dash, color = :red, linewidth = 1.5, label = nothing)
+
+savefig("soc_heatmap.png")
+
+
 # Call the plotting function using precomputed benefits and save the heatmap
 plot_rule_of_thumb_benefits(dt0, test_start_times, test_park_times, benefits_dict_restored, "Rule of Thumb", 1)
 savefig("benefits_rot.png")
