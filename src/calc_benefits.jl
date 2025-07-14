@@ -138,6 +138,46 @@ function run_rule_of_thumb_stochastic_events_simulation(dt0, strat, mcdraws, dri
 end
 
 
+function fill_soc_matrix(soc_matrix, df, drive_start)
+    df[!, "number_vehicles"] .= number_vehicles
+    soc = ((df[!, "number_vehicles"] .- df[!, "vehicles_plugged"]).*df[!, "soc_driving"] .+ df[!,"vehicles_plugged"].*df[!,"soc_plugged"]) ./ number_vehicles
+    time = df[!, "datetime"]
+
+    for (i, t) in enumerate(time)
+        soc_matrix[hour(drive_start)+1, i] = soc[i]
+    end
+    # print(soc_matrix)
+    return soc_matrix
+end
+
+function plot_soc_heatmap(soc_matrix, label)
+
+    heatmap(0:23, 0:23, soc_matrix[:, 1:end-12],
+        xlabel = "Time (Midnight to Midnight)",
+        ylabel = "Drive Start Time (Hour)",
+        title = label,
+        colorbar_title = "SOC",
+        aspect_ratio = 1,
+        c=:viridis, 
+        xlims=(0,23), 
+        ylims=(0,23))
+
+    for p in 0:23
+        if p < 16
+            plot!(rectangle(8, 1, p, p), fill=false, label=nothing, linewidth=2, color=:black, fillcolor=nothing)
+        else 
+            plot!(rectangle(24-p, 1, p, p), fill=false, label=nothing, linewidth=2, color=:black, fillcolor=nothing)
+            plot!(rectangle(p - 16, 1, 0, p), fill=false, label=nothing, linewidth=2, color=:black, fillcolor=nothing)
+        end
+    end
+    vline!([12, 20], linestyle = :dash, color = :red, linewidth = 1.5, label = nothing)
+    hline!([12, 20], linestyle = :dash, color = :red, linewidth = 1.5, label = nothing)
+
+    savefig(label * "_soc_heatmap.png")
+
+
+end 
+
 function plot_rule_of_thumb_benefits(dt0, test_start_times, test_park_times, benefits_dict, title, index)
     # Create a 24x24 matrix for benefits, initialized with NaN
     benefit_matrix = fill(NaN, 24, 24)  # rows: drive duration (0 to 23 hours), columns: drive start hour (0 to 23)
