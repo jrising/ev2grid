@@ -103,9 +103,16 @@ Returns the appropriate simulation step function for the given `dt1` based on a 
 This function determines whether vehicles should drive or plug based on time of day.
 """
 function get_simustep_deterministic(dt1::DateTime, drive_starts_time, park_starts_time)
+    # find the date 
     date_part = Dates.Date(dt1)
     dt_9am = DateTime(date_part, drive_starts_time)
-    dt_5pm = DateTime(date_part, park_starts_time)
+    # find if the park date is today or tomorrow
+    if hour(park_starts_time) < hour(drive_starts_time) && hour(dt1) > hour(drive_starts_time) 
+        date_part_tomorrow = Dates.Date(dt1) + Dates.Day(1)
+        dt_5pm = DateTime(date_part_tomorrow, park_starts_time)
+    else 
+        dt_5pm = DateTime(date_part, park_starts_time)
+    end 
 
     if dt_9am - periodstep(1) ≤ dt1 < dt_5pm - periodstep(1)
         return simustep_alldrive
@@ -123,7 +130,12 @@ The function chooses between `simustep_alldrive`, `simustep_allplug`, or `simust
 function get_simustep_stochastic(dt1::DateTime, drive_starts_time, park_starts_time)
     date_part = Dates.Date(dt1)
     dt_drive_start = DateTime(date_part, drive_starts_time)
-    dt_park_start = DateTime(date_part, park_starts_time)
+    if hour(park_starts_time) < hour(drive_starts_time) && hour(dt1) > hour(drive_starts_time) 
+        date_part_tomorrow = Dates.Date(dt1) + Dates.Day(1)
+        dt_park_start = DateTime(date_part_tomorrow, park_starts_time)
+    else 
+        dt_park_start = DateTime(date_part, park_starts_time)
+    end 
 
     rand_delayed_return = rand()
     rand_event_return = rand()

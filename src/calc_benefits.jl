@@ -27,7 +27,7 @@ function rectangle(w, h, x, y)
 end
 
 function run_optimized_simulation(dt0, SS, drive_starts_time, park_starts_time)
-    mcdraws = 1
+    global mcdraws = 1
     @time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
 
     df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_starts_time, park_starts_time)
@@ -36,8 +36,8 @@ function run_optimized_simulation(dt0, SS, drive_starts_time, park_starts_time)
     return benefits
 end
 
-function run_optimized_stochastic_simulation(dt0, SS, mcdraws, drive_starts_time, park_starts_time)
-    mcdraws = 100
+function run_optimized_stochastic_simulation(dt0, SS, drive_starts_time, park_starts_time)
+    global mcdraws = 100
     @time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
 
     df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_starts_time, park_starts_time, true)
@@ -142,7 +142,7 @@ function fill_soc_matrix(soc_matrix, df, drive_start)
     df[!, "number_vehicles"] .= number_vehicles
     soc = ((df[!, "number_vehicles"] .- df[!, "vehicles_plugged"]).*df[!, "soc_driving"] .+ df[!,"vehicles_plugged"].*df[!,"soc_plugged"]) ./ number_vehicles
     time = df[!, "datetime"]
-
+    # print(df)
     for (i, t) in enumerate(time)
         soc_matrix[hour(drive_start)+1, i] = soc[i]
     end
@@ -209,3 +209,34 @@ function plot_rule_of_thumb_benefits(dt0, test_start_times, test_park_times, ben
     # annotate!(0.5, 20, text("Peak Pricing", :black, :left, 10))
 end
 
+
+function plot_rule_of_thumb_benefits_difference(dt0, test_start_times, test_park_times, benefits_dict, title, index)
+    # Create a 24x24 matrix for benefits, initialized with NaN
+    benefit_matrix = fill(NaN, 24, 24)  # rows: drive duration (0 to 23 hours), columns: drive start hour (0 to 23)
+
+    for drive_start in test_start_times
+        for park_start in test_park_times
+            if park_starts_time <= drive_starts_time
+                continue
+            end
+
+            rule_benefits_tuple = benefits_dict[string(drive_start)][string(park_start)]
+            benefit = rule_benefits_tuple[index] - rule_benefits_tuple[5] ## difference between rule of thumb and baseline rule of thumb
+            if !ismissing(benefit)
+                benefit_matrix[hour(park_start)+1, hour(drive_start)+1,] = benefit
+            end
+        end
+    end
+
+    # Create a heatmap with drive start time on the x-axis and driving duration on the y-axis
+    heatmap(0:23, 0:23, benefit_matrix,
+            xlabel = "Drive Start Time (Hour)",
+            ylabel = "Drive Park Time (Hour)",
+            title = title,
+            colorbar_title = "Difference in benefit")
+    vline!([12, 20], linestyle = :dash, color = :red, linewidth = 1.5, label = nothing)
+    hline!([12, 20], linestyle = :dash, color = :red, linewidth = 1.5, label = nothing)
+    # Annotate "peak pricing" at the corresponding locations
+    # annotate!(12, 23.5, text("Peak Pricing", :black, :center, 10, rotation=90))
+    # annotate!(0.5, 20, text("Peak Pricing", :black, :left, 10))
+end
