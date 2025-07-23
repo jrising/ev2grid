@@ -1,5 +1,7 @@
 using Dates, StatsBase
 
+include("bizutils.jl")
+
 ## Unexpected changes in vehicles
 prob_event = 0.01 # per hour, so 1 per 4 days
 prob_event_vehicles = [0.5, .25, .125, .125]
@@ -103,6 +105,10 @@ Returns the appropriate simulation step function for the given `dt1` based on a 
 This function determines whether vehicles should drive or plug based on time of day.
 """
 function get_simustep_deterministic(dt1::DateTime, drive_starts_time, park_starts_time)
+    if drive_starts_time == park_starts_time # can happen under stochastic times
+        return simustep_base
+    end
+
     date_part = Dates.Date(dt1)
     dt_9am = DateTime(date_part, drive_starts_time)
     dt_5pm = DateTime(date_part, park_starts_time)
@@ -149,4 +155,14 @@ function get_simustep_stochastic(dt1::DateTime, drive_starts_time, park_starts_t
     end
 
     return get_simustep_deterministic(dt1, drive_starts_time, park_starts_time)
+end
+
+"""
+Returns a random draw of Normal(starts_time, hours_sd), rounded to the closest timestep
+timestep is number of hours per timestep (may be less than 1)
+"""
+function get_stochastic_times(count::Int64, time::Time, hours_sd::Float64, timestep::Float64)
+    delta = hours_sd * randn(count)
+    timediff = periodstep.(round.(Int, delta / timestep))
+    time + timediff
 end
