@@ -47,7 +47,7 @@ plot!(size=(700,400))
 savefig("version1-det.pdf")
 
 mcdraws = 100
-@time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
+@time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time, 2.);
 
 Plots.heatmap(transpose(max.(VV[:, 5, :, 5], -10)); xticks = (1:6:length(hourly_ticks), hour_labels))
 

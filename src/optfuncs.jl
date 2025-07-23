@@ -4,7 +4,7 @@ include("retail.jl")
 include("optutils.jl")
 include("simulate.jl")
 
-function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_time::Time)
+function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_time::Time, hours_sd::Float64=0.)
     global event_log = [] ## clear out event_log before optimizing
     ## vehicles_plugged, soc_plugged, soc_driving
     strat = zeros(Int64, SS-1, EE, FF, FF);
@@ -27,6 +27,12 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
     value_energy_bysoc = [value_energy(vehicle_split[ff][1], vehicle_split[ff][3], soc_needed, vehicles_plugged_range[ee]) for ee=1:EE, ff=1:FF]
     VV2 = repeat(reshape(value_energy_bysoc, EE, FF, 1), 1, 1, FF)
     VVall[end, :, :, :] = VV2
+
+    # Take draws of drive and start times, if that's stochastic
+    if hours_sd > 0
+        drive_times = get_stochastic_times(mcdraws, drive_starts_time, hours_sd, timestep)
+        park_times = get_stochastic_times(mcdraws, park_starts_time, hours_sd, timestep)
+    end
 
     # STEP 2: Determine optimal action for t = S-1 and back
     for tt in (SS-1):-1:1
@@ -51,6 +57,8 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
         for mc in 1:mcdraws
             if mcdraws == 1
                 simustep = get_simustep_deterministic(dt1, drive_starts_time, park_starts_time)
+            elseif hours_sd > 0
+                simustep = get_simustep_deterministic(dt1, drive_times[mc], park_times[mc])
             else
                 simustep = get_simustep_stochastic(dt1, drive_starts_time, park_starts_time)
             end
