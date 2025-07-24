@@ -112,13 +112,7 @@ function get_simustep_deterministic(dt1::DateTime, drive_starts_time, park_start
     # find the date
     date_part = Dates.Date(dt1)
     dt_9am = DateTime(date_part, drive_starts_time)
-    # find if the park date is today or tomorrow
-    if hour(park_starts_time) < hour(drive_starts_time) && hour(dt1) > hour(drive_starts_time)
-        date_part_tomorrow = Dates.Date(dt1) + Dates.Day(1)
-        dt_5pm = DateTime(date_part_tomorrow, park_starts_time)
-    else
-        dt_5pm = DateTime(date_part, park_starts_time)
-    end
+    dt_5pm = get_park_time(dt1, drive_starts_time, park_starts_time)
 
     if dt_9am - periodstep(1) ≤ dt1 < dt_5pm - periodstep(1)
         return simustep_alldrive
@@ -136,12 +130,7 @@ The function chooses between `simustep_alldrive`, `simustep_allplug`, or `simust
 function get_simustep_stochastic(dt1::DateTime, drive_starts_time, park_starts_time)
     date_part = Dates.Date(dt1)
     dt_drive_start = DateTime(date_part, drive_starts_time)
-    if hour(park_starts_time) < hour(drive_starts_time) && hour(dt1) > hour(drive_starts_time)
-        date_part_tomorrow = Dates.Date(dt1) + Dates.Day(1)
-        dt_park_start = DateTime(date_part_tomorrow, park_starts_time)
-    else
-        dt_park_start = DateTime(date_part, park_starts_time)
-    end
+    dt_park_start = get_park_time(dt1, drive_starts_time, park_starts_time)
 
     rand_delayed_return = rand()
     rand_event_return = rand()
@@ -167,6 +156,19 @@ function get_simustep_stochastic(dt1::DateTime, drive_starts_time, park_starts_t
     end
 
     return get_simustep_deterministic(dt1, drive_starts_time, park_starts_time)
+end
+
+"""
+Returns the park time, for the current driving
+"""
+function get_park_time(dt1::DateTime, drive_starts_time, park_starts_time)
+    # find if the park date is today or tomorrow
+    if hour(park_starts_time) < hour(drive_starts_time) && hour(dt1) > hour(drive_starts_time)
+        date_part_tomorrow = Dates.Date(dt1) + Dates.Day(1)
+        return DateTime(date_part_tomorrow, park_starts_time)
+    else
+        return DateTime(Dates.Date(dt1), park_starts_time)
+    end
 end
 
 """
