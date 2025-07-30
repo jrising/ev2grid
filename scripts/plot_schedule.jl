@@ -5,7 +5,7 @@ include("../src/customer.jl")
 
 timestep = 1. # 1 hour
 df = DataFrame(dt=DateTime("2023-06-01T00:00:00"):Hour(1):DateTime("2023-06-03T00:00:00"))
-df[!, :soc] = soc_scheduled.(df.dt)
+df[!, :soc] = soc_scheduled.(df.dt, Dates.Time(9, 0, 0))
 
 pp = plot(df.dt, df.soc, seriestype=:steppost, label="")
 plot!(pp, size=(1000, 400))

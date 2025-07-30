@@ -31,7 +31,7 @@ for tt in (SS-1):-1:1
     soc1_byaction = soc0_byaction .+ dsoc;
 
     dt1 = dt0 + periodstep(tt)
-    soc_needed = soc_scheduled(dt1)
+    soc_needed = soc_scheduled(dt1, Dates.Time(9, 0, 0))
     vehicle_split = split_below.(soc_range, soc_needed)
     ff12_byaction = discrete_roundbelow.(soc1_byaction, soc_min, soc_max, FF);
 

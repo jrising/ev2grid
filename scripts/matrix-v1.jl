@@ -1,8 +1,8 @@
 using Plots
 using Dates
 
-include("../src/config.jl")
 include("../src/customer.jl")
+include("../src/config.jl")
 include("../src/optfuncs.jl")
 include("../src/fullsim.jl")
 

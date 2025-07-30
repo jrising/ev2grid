@@ -48,7 +48,7 @@ function optimize(dt0::DateTime, regrange::Vector{Float64})
     soc1_byaction = soc0_byaction .+ dsoc;
 
     # STEP 1: Calculate V[S] under every scenario
-    soc_needed = soc_scheduled(dt0 + periodstep(SS));
+    soc_needed = soc_scheduled(dt0 + periodstep(SS), Dates.Time(9, 0, 0));
     vehicle_split = split_below.(soc_range, soc_needed);
     value_energy_bysoc = [value_energy(vehicle_split[ff][1], vehicle_split[ff][3], soc_needed, vehicles_plugged_range[ee]) for ee=1:EE, ff=1:FF]
     VV2 = repeat(reshape(value_energy_bysoc, EE, FF, 1), 1, 1, FF)
@@ -70,7 +70,7 @@ function optimize(dt0::DateTime, regrange::Vector{Float64})
         price = get_retail_price(dt1)
         valuep = [value_power_action(price, dsoc[pp, ee, ff1, ff2], vehicle_split[ff1][1], vehicles_plugged_range[ee]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF]
 
-        soc_needed = soc_scheduled(dt1)
+        soc_needed = soc_scheduled(dt1, Dates.Time(9, 0, 0))
         vehicle_split = split_below.(soc_range, soc_needed)
         valuepns = [value_power_newstate(price, vehicle_split[ff12][1], soc_needed - vehicle_split[ff12][2], vehicles_plugged_range[ee]) for ee=1:EE, ff12=1:FF]
         valuee = [value_energy.(vehicle_split[ff12][1], vehicle_split[ff12][3], soc_needed, vehicles_plugged_range[ee]) for ee=1:EE, ff12=1:FF];
