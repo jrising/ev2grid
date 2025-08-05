@@ -90,13 +90,6 @@ function run_optimized_regrange_simulation(dt0, SS, drive_starts_time, park_star
     return benefits
 end 
 
-function run_rule_of_thumb_regrange_simulation(dt0, SS, drive_starts_time, park_starts_time)
-    vehicles_plugged_1 = 4.
-    global mcdraws = 1
-    df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule_baseline(tt, state), (tt, state) -> thumbrule_regrange(tt, state), vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
-    benefits = sum(df[!, "valuep"])
-    return benefits
-end 
 
 function run_optimized_stochastic_simulation(dt0, SS, drive_starts_time, park_starts_time)
     vehicles_plugged_1 = 4.

@@ -101,37 +101,13 @@ function calculate_middle_charging_band_rot(tt, state)
 end
 
 function thumbrule_regrange(drive_starts_time, park_starts_time)
-    ## first calculate ROT with different bounds 
-    ## regrange here is the maximum amount that can be charged or discharged
     vehicles_plugged_1 = 4.
-    # regrange_value = (fracpower_max - fracpower_min) * timestep * vehicles_plugged_1 * vehicle_capacity
-    # df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, 0.4, 0.85), (tt) -> regrange_value, vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
-    # benefits1 = sum(df[!, "valuep"]) + sum(df[!, "valuer"])
-    # ## regrange here is the maximum amount that can be charged or discharged
-
-    # ## Then calculate under a fast charging scenario where the goal is 0.625 and regrange is anywhere between 0.3 and 0.95
-    # vehicles_plugged_1 = 4.
-    # regrange_value = min(regrange_value, (0.95 - 0.3) * vehicles_plugged_1 * vehicle_capacity)
-    
-
-    # df = fullsimulate(dt0, (tt, state) -> calculate_no_arbitrage_with_ramp(tt, state, drive_starts_time), (tt) -> regrange_value, vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
-    # benefits2 = sum(df[!, "valuep"]) + sum(df[!, "valuer"])
-
-    # ## calculate 0.95 - middle of the charging band rule of thumb 
-    # vehicles_plugged_1 = 4.
-    # regrange_value =(fracpower_max - fracpower_min) * timestep * vehicles_plugged_1 * vehicle_capacity
-
-    # ## combine options 1 and 3 instead of 0.4 and 0.85, calculate the general case based on charging rate 
     
     # ## allow energy arbitrage so long as there is space in the middle of your charging rate band to fluctuate as opposed to being fixed at 0.625 when at level 3 charging. 
     # ## 1. Calculate how much we can charge in 1 period. 
     # fracpower_max
     ## 2. Get the range left for ROT1 as 0.3 + maxcharge to 0.95 - maxcharge .
     range_left = (0.95 - fracpower_max)*timestep * vehicles_plugged_1 * vehicle_capacity - (0.3 + fracpower_min)*timestep * vehicles_plugged_1 * vehicle_capacity 
-    ## 3. If that’s a negative range, then just do ROT1 with a 0.625 target.
-    ## If it's a positive range, allow arbitrage within the range and regrange + frac_power_max up to 0.95 - frac_power_min to 0.3 
-    print(fracpower_max, "  ")
-    print(range_left, "  ")
 
     regrange_func = (tt) -> begin
         current_time = Dates.Time(tt % 24, 0, 0)
@@ -152,6 +128,9 @@ function thumbrule_regrange(drive_starts_time, park_starts_time)
         end
     end
 
+    ## 3. If that’s a negative range, then just do ROT1 with a 0.625 target.
+    ## If it's a positive range, allow arbitrage within the range and regrange + frac_power_max up to 0.95 - frac_power_min to 0.3 
+
     ## need to adjust plan for regrange_value conditional on being plugged in (outside of drive_starts_time and park_starts_time)
     if range_left < 0 
         regrange_value = (0.95 - 0.3) * timestep * vehicles_plugged_1 * vehicle_capacity
@@ -166,7 +145,7 @@ function thumbrule_regrange(drive_starts_time, park_starts_time)
     end
 
 
-    ## 4. Offer as regrange min(0.95 - SOC, SOC - 0.3).
+    ## 4. Offer as regrange min(0.95 - SOC, SOC - 0.3). 
 
 
     benefits = sum(df[!, "valuep"]) + sum(df[!, "valuer"])
