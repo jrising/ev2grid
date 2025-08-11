@@ -48,9 +48,9 @@ function get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling)
     #     soc_goal = 0.8
     # end 
 
+    safe_charging(tt, state, drive_starts_time, soc_goal)
 
-
-    return max(min(soc_goal - soc_plugged_1, timestep * fracpower_max), timestep * fracpower_min)
+    # return max(min(soc_goal - soc_plugged_1, timestep * fracpower_max), timestep * fracpower_min)
 end
 
 function get_dsoc_thumbrule_baseline(tt,state)
@@ -60,7 +60,8 @@ function get_dsoc_thumbrule_baseline(tt,state)
     return max(min(soc_goal - soc_plugged_1, timestep * fracpower_max), timestep * fracpower_min)
 end 
 
-function calculate_no_arbitrage_with_ramp(tt, state, drive_starts_time, floor, ceiling)
+
+function safe_charging(tt, state, drive_starts_time, soc_goal)
     vehicles_plugged_1, soc_plugged_1, soc_driving_1 = state
     dt1 = dt0 + periodstep(tt)
     
@@ -81,36 +82,27 @@ function calculate_no_arbitrage_with_ramp(tt, state, drive_starts_time, floor, c
 
     if time_available < time_required # if not enought time, set goal to 0.8
         soc_goal = 0.8
-    else
-        soc_goal = (ceiling + floor) / 2
     end 
          
     soc_goal = max(soc_goal, SOC_floor) ## if the floor is above the goal, set the goal to the floor
 
     return max(min(soc_goal - soc_plugged_1, timestep * fracpower_max), timestep * fracpower_min)
+
 end 
 
-function calculate_middle_charging_band_rot(tt, state)
-    vehicles_plugged_1, soc_plugged_1, soc_driving_1 = state
-    dt1 = dt0 + periodstep(tt)
-
-    middle_of_band = fracpower_max*timestep
-    soc_goal = 0.95 - middle_of_band
-    return max(min(soc_goal - soc_plugged_1, timestep * fracpower_max), timestep * fracpower_min)
-
-end
-
-function thumbrule_regrange(drive_starts_time, park_starts_time)
-    vehicles_plugged_1 = 4.
+function thumbrule_regrange(dt0, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = find_starting_vehicles_plugged(dt0, drive_starts_time, park_starts_time)
     
     # ## allow energy arbitrage so long as there is space in the middle of your charging rate band to fluctuate as opposed to being fixed at 0.625 when at level 3 charging. 
     # ## 1. Calculate how much we can charge in 1 period. 
     # fracpower_max
     ## 2. Get the range left for ROT1 as 0.3 + maxcharge to 0.95 - maxcharge .
-    range_left = (0.95 - fracpower_max)*timestep * vehicles_plugged_1 * vehicle_capacity - (0.3 + fracpower_min)*timestep * vehicles_plugged_1 * vehicle_capacity 
+    ceiling = 0.95 - fracpower_max 
+    floor = 0.3 + fracpower_min 
 
     regrange_func = (tt) -> begin
-        current_time = Dates.Time(tt % 24, 0, 0)
+        dt1 = dt0 + periodstep(tt)
+        current_time = Dates.Time(dt1)
         if drive_starts_time <= park_starts_time
             # Don't park on the next day
             if current_time >= drive_starts_time && current_time <= park_starts_time
@@ -132,16 +124,13 @@ function thumbrule_regrange(drive_starts_time, park_starts_time)
     ## If it's a positive range, allow arbitrage within the range and regrange + frac_power_max up to 0.95 - frac_power_min to 0.3 
 
     ## need to adjust plan for regrange_value conditional on being plugged in (outside of drive_starts_time and park_starts_time)
-    if range_left < 0 
+    if ceiling < floor 
         regrange_value = (0.95 - 0.3) * timestep * vehicles_plugged_1 * vehicle_capacity
-        df = fullsimulate(dt0, (tt, state) -> calculate_no_arbitrage_with_ramp(tt, state, drive_starts_time, 0.3, 0.95), (tt) -> regrange_value, vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
-
+        soc_goal = (0.95- 0.3) / 2
+        df = fullsimulate(dt0, (tt, state) -> safe_charging(tt, state, drive_starts_time, soc_goal), (tt) -> regrange_value, vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
     else 
-        ceiling = 0.95 - fracpower_max 
-        floor = 0.3 + fracpower_min 
         regrange_value = (fracpower_max- fracpower_min) * timestep * vehicles_plugged_1 * vehicle_capacity 
         df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling), regrange_func, vehicles_plugged_1,  0.5, 0.5, drive_starts_time, park_starts_time)
-
     end
 
 
