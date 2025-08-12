@@ -17,7 +17,7 @@ include("optfuncs.jl")
 
 function run_rule_of_thumb_simulation(dt0, drive_starts_time, park_starts_time)
     vehicles_plugged_1 = find_starting_vehicles_plugged(dt0, drive_starts_time, park_starts_time)
-    df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, 0.3, 0.95), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
+    df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, soc_min, soc_max, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
     benefits = sum(df[!, "valuep"])
 
     return benefits
@@ -140,10 +140,10 @@ function run_rule_of_thumb_stochastic_events_simulation(dt0, strat, mcdraws, dri
         push!(benefits_list_optimized, benefits_stoch)
         # pass events from event_log into rule of thumb simulation
         events = event_log
-        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, 0.3, 0.95), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time; events=events)
+        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, soc_min, soc_max, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time; events=events)
         benefits_rot = sum(df[!, "valuep"])
         push!(benefits_list_rot, benefits_rot)
-        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule_baseline(tt, state), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time; events=events)
+        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule_baseline(tt, state, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time; events=events)
         benefits_rot_baseline = sum(df[!, "valuep"])
         push!(benefits_list_rot_baseline, benefits_rot_baseline)
 

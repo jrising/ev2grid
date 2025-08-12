@@ -31,6 +31,9 @@ fracpower_min = -max_charging_kw / vehicle_capacity # discharge in terms of frac
 fracpower_max = max_charging_kw / vehicle_capacity # charging in terms of fraction of energy
 efficiency = 0.95 # EFF
 
+# Level of charge required when begin driving 
+drive_time_charge_level = 0.8
+
 """
     soc_scheduled(dt::DateTime, drive_starts_time::Time) -> Float64
 

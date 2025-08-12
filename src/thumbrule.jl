@@ -1,5 +1,5 @@
 using Dates
-function get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling)
+function get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive_time_charge_level)
     vehicles_plugged_1, soc_plugged_1, soc_driving_1 = state
     dt1 = dt0 + periodstep(tt)
     ## find when the users start to drive
@@ -11,11 +11,9 @@ function get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling)
 
     time_available = (dt_drive - dt1).value / 3600 / 1000 # in hours
 
-    # Calculate floor SOC needed to ramp up to 80% by 9am (should incorporate the time available)
+    # Calculate floor SOC needed to ramp up to 80%
 
-    charge_needed = max(0,0.80 - soc_plugged_1)
-    time_required = charge_needed / (fracpower_max * timestep)
-    SOC_floor = max(floor, soc_plugged_1 - time_required * fracpower_max) ## Charge can't go below 0.3
+    SOC_floor, time_required = calculate_SOC_floor(state, floor, drive_time_charge_level)
     
     # calculate if a price change occurs before we need to start driving 
     # take dt1 and drive_starts_time and test each hour in between for if it switches peak to non peak 
@@ -33,35 +31,31 @@ function get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling)
     end
     
 
-    soc_goal = 0.8 ## if nothing else set to 80% 
+    soc_goal = drive_time_charge_level ## if nothing else set to 80% 
 
     if is_peak(dt1) && SOC_floor <= soc_plugged_1 && price_switch
         soc_goal = SOC_floor # Discharge if peak price, above floor, and price change coming
     elseif !is_peak(dt1)
         soc_goal = ceiling # Charge if off peak
     elseif SOC_floor > soc_plugged_1
-        soc_goal = 0.80 # Charge if below floor
+        soc_goal = drive_time_charge_level # Charge if below floor
     end
 
-    ## should I add this?
-    # if time_available < time_required # if not enought time, set goal to 0.8 to ramp up to drive time
-    #     soc_goal = 0.8
-    # end 
-
-    safe_charging(tt, state, drive_starts_time, soc_goal)
+    ## add safe_charging as a fallback
+    safe_charging(tt, state, drive_starts_time, soc_goal, floor, drive_time_charge_level)
 
     # return max(min(soc_goal - soc_plugged_1, timestep * fracpower_max), timestep * fracpower_min)
 end
 
-function get_dsoc_thumbrule_baseline(tt,state)
+function get_dsoc_thumbrule_baseline(tt, state, drive_time_charge_level)
     vehicles_plugged_1, soc_plugged_1, soc_driving_1 = state
     dt1 = dt0 + periodstep(tt)
-    soc_goal = 0.8
+    soc_goal = drive_time_charge_level
     return max(min(soc_goal - soc_plugged_1, timestep * fracpower_max), timestep * fracpower_min)
 end 
 
 
-function safe_charging(tt, state, drive_starts_time, soc_goal)
+function safe_charging(tt, state, drive_starts_time, soc_goal, floor, drive_time_charge_level)
     vehicles_plugged_1, soc_plugged_1, soc_driving_1 = state
     dt1 = dt0 + periodstep(tt)
     
@@ -73,15 +67,13 @@ function safe_charging(tt, state, drive_starts_time, soc_goal)
 
     # Calculate floor SOC needed to ramp up to 80% by drive time
 
-    charge_needed = max(0,0.80 - soc_plugged_1)
-    time_required = charge_needed / (fracpower_max * timestep)
-    SOC_floor = soc_plugged_1 - time_required * fracpower_max ## Calculate ramp to get to 0.8 by drive time 
+    SOC_floor, time_required = calculate_SOC_floor(state, floor, drive_time_charge_level)
     
     time_available = (dt_drive - dt1).value / 3600 / 1000 # in hours
 
 
     if time_available < time_required # if not enought time, set goal to 0.8
-        soc_goal = 0.8
+        soc_goal = drive_time_charge_level
     end 
          
     soc_goal = max(soc_goal, SOC_floor) ## if the floor is above the goal, set the goal to the floor
@@ -90,29 +82,38 @@ function safe_charging(tt, state, drive_starts_time, soc_goal)
 
 end 
 
-function thumbrule_regrange(dt0, drive_starts_time, park_starts_time)
+function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time_charge_level)
     vehicles_plugged_1 = find_starting_vehicles_plugged(dt0, drive_starts_time, park_starts_time)
     
     # ## allow energy arbitrage so long as there is space in the middle of your charging rate band to fluctuate as opposed to being fixed at 0.625 when at level 3 charging. 
     # ## 1. Calculate how much we can charge in 1 period. 
     # fracpower_max
     ## 2. Get the range left for ROT1 as 0.3 + maxcharge to 0.95 - maxcharge .
-    ceiling = 0.95 - fracpower_max 
-    floor = 0.3 + fracpower_min 
+    ceiling = soc_max - fracpower_max 
+    floor = soc_min + fracpower_min 
+
+    ## consider the case where the regrange overlaps the edges of the battery 
+    if ceiling + fracpower_max < drive_time_charge_level
+        ## figure out how many hours of buffer is needed 
+        n = (drive_time_charge_level - ceiling) / fracpower_max
+        buffer = ceil(n)
+    else
+        buffer = 0
+    end
 
     regrange_func = (tt) -> begin
         dt1 = dt0 + periodstep(tt)
         current_time = Dates.Time(dt1)
         if drive_starts_time <= park_starts_time
             # Don't park on the next day
-            if current_time >= drive_starts_time && current_time <= park_starts_time
+            if current_time >= drive_starts_time && current_time <= park_starts_time - Hour(buffer)
                 return 0.0  # During drive hours
             else
                 return regrange_value  # Outside drive hours
             end
         else
             # Midnight crossing case
-            if current_time >= drive_starts_time || current_time <= park_starts_time
+            if current_time >= drive_starts_time || current_time <= park_starts_time - Hour(buffer)
                 return 0.0  # During drive hours
             else
                 return regrange_value  # Outside drive hours
@@ -123,14 +124,15 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time)
     ## 3. If that’s a negative range, then just do ROT1 with a 0.625 target.
     ## If it's a positive range, allow arbitrage within the range and regrange + frac_power_max up to 0.95 - frac_power_min to 0.3 
 
-    ## need to adjust plan for regrange_value conditional on being plugged in (outside of drive_starts_time and park_starts_time)
+    regrange_value = min(soc_max - soc_min, fracpower_max - fracpower_min) * timestep * vehicles_plugged_1 * vehicle_capacity
+
     if ceiling < floor 
-        regrange_value = (0.95 - 0.3) * timestep * vehicles_plugged_1 * vehicle_capacity
-        soc_goal = (0.95- 0.3) / 2
-        df = fullsimulate(dt0, (tt, state) -> safe_charging(tt, state, drive_starts_time, soc_goal), (tt) -> regrange_value, vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
+        ## no arbitrage case, focus on reg services
+        soc_goal = (soc_max- soc_min) / 2
+        df = fullsimulate(dt0, (tt, state) -> safe_charging(tt, state, drive_starts_time, soc_goal, floor, drive_time_charge_level), (tt) -> regrange_value, vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
     else 
-        regrange_value = (fracpower_max- fracpower_min) * timestep * vehicles_plugged_1 * vehicle_capacity 
-        df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling), regrange_func, vehicles_plugged_1,  0.5, 0.5, drive_starts_time, park_starts_time)
+        ## include arbitrage between ceiling and floor
+        df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive_time_charge_level), regrange_func, vehicles_plugged_1,  0.5, 0.5, drive_starts_time, park_starts_time)
     end
 
 
@@ -139,4 +141,12 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time)
 
     benefits = sum(df[!, "valuep"]) + sum(df[!, "valuer"])
     return benefits
+end 
+
+function calculate_SOC_floor(state, floor, drive_time_charge_level)
+    vehicles_plugged_1, soc_plugged_1, soc_driving_1 = state
+    charge_needed = max(0,drive_time_charge_level - soc_plugged_1)
+    time_required = charge_needed / (fracpower_max * timestep)
+    SOC_floor = max(floor, soc_plugged_1 - time_required * fracpower_max) ## Charge can't go below 0.3
+    return SOC_floor, time_required
 end 

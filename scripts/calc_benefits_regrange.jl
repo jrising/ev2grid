@@ -14,5 +14,5 @@ soc_driving_1 = 0.5
 benefits = run_optimized_regrange_simulation(dt0, SS, drive_starts_time, park_starts_time)
 print("Optimized regrange benefits $(benefits)\n")
 
-benefits_rot = thumbrule_regrange(dt0, drive_starts_time, park_starts_time)
+benefits_rot = thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time_charge_level)
 print("Rule of thumb regrange benefits: $(benefits_rot)")
