@@ -31,6 +31,9 @@ fracpower_min = -max_charging_kw / vehicle_capacity # discharge in terms of frac
 fracpower_max = max_charging_kw / vehicle_capacity # charging in terms of fraction of energy
 efficiency = 0.95 # EFF
 
+# Level of charge required when begin driving 
+drive_time_charge_level = 0.8
+
 """
     soc_scheduled(dt::DateTime, drive_starts_time::Time) -> Float64
 
@@ -73,3 +76,32 @@ function smart_config(FF_proposed)
 
     return Int64(FF_options[soln[2]])
 end
+
+""" 
+Function to check whether to start vehicles plugged in or not depending on drive and park times 
+inputs: dt0, drive_start, park_start 
+output: vehicles_plugged1
+"""
+function find_starting_vehicles_plugged(dt0, drive_starts_time, park_starts_time)
+    
+    if drive_starts_time < Dates.Time(dt0)
+        dt_drive = DateTime(Dates.Date(dt0)+ Dates.Day(1), drive_starts_time) ## assumes you start driving the next day
+    else
+        dt_drive = DateTime(Dates.Date(dt0), drive_starts_time) ## assumes you start driving later that day
+    end 
+
+    if park_starts_time < Dates.Time(dt0)
+        dt_park = DateTime(Dates.Date(dt0)+ Dates.Day(1), drive_starts_time) ## assumes you park the next day
+    else
+        dt_park = DateTime(Dates.Date(dt0), drive_starts_time) ## assumes you park later that day
+    end 
+
+    if dt_drive < dt0 && dt_park > dt0 
+        vehicles_plugged1 = 0. 
+    else
+        vehicles_plugged1 = 4.  
+    
+    end
+    
+    return vehicles_plugged1
+end 
