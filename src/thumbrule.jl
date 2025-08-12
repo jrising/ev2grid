@@ -93,7 +93,7 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
     floor = soc_min + fracpower_min 
 
     ## consider the case where the regrange overlaps the edges of the battery 
-    if ceiling + fracpower_max < drive_time_charge_level
+    if ceiling < drive_time_charge_level
         ## figure out how many hours of buffer is needed 
         n = (drive_time_charge_level - ceiling) / fracpower_max
         buffer = ceil(n)
