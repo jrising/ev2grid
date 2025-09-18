@@ -16,7 +16,7 @@ include("optfuncs.jl")
 
 
 function run_rule_of_thumb_simulation(dt0, drive_starts_time, park_starts_time)
-    vehicles_plugged_1 = find_starting_vehicles_plugged(dt0, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
     df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, soc_min, soc_max, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
     benefits = sum(df[!, "valuep"])
 
@@ -28,7 +28,7 @@ function rectangle(w, h, x, y)
 end
 
 function run_optimized_simulation(dt0, SS, drive_starts_time, park_starts_time)
-    vehicles_plugged_1 = find_starting_vehicles_plugged(dt0, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
     global mcdraws = 1
     @time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
 
@@ -39,7 +39,7 @@ function run_optimized_simulation(dt0, SS, drive_starts_time, park_starts_time)
 end
 
 function run_optimized_regrange_simulation(dt0, SS, drive_starts_time, park_starts_time)
-    vehicles_plugged_1 = find_starting_vehicles_plugged(dt0, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
 
     probstate = optimize_regrange_probstate_outer_loop(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time)
     strat, probfail, optregrange = optimize_regrange_probstate(dt0, probstate, drive_starts_time, park_starts_time);
@@ -48,11 +48,11 @@ function run_optimized_regrange_simulation(dt0, SS, drive_starts_time, park_star
     df[!, :optregrange] = [0.; optregrange]
     benefits = sum(df[!, "valuep"]) + sum(df[!, "valuer"])
     return benefits
-end 
+end
 
 
 function run_optimized_stochastic_simulation(dt0, SS, drive_starts_time, park_starts_time)
-    vehicles_plugged_1 = find_starting_vehicles_plugged(dt0, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
     global mcdraws = 100
     @time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
 
@@ -131,7 +131,7 @@ function run_rule_of_thumb_stochastic_events_simulation(dt0, strat, mcdraws, dri
     benefits_list_rot = []
     benefits_list_rot_baseline = []
 
-    vehicles_plugged_1 = find_starting_vehicles_plugged(dt0, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
 
     for mc in mcdraws
         ## first simulate stochastic events and calculate
@@ -176,14 +176,14 @@ function plot_soc_heatmap(soc_matrix, label)
         title = label,
         colorbar_title = "SOC",
         aspect_ratio = 1,
-        c=:viridis, 
-        xlims=(0,23), 
+        c=:viridis,
+        xlims=(0,23),
         ylims=(0,23))
 
     for p in 0:23
         if p < 16
             plot!(rectangle(8, 1, p, p), fill=false, label=nothing, linewidth=2, color=:black, fillcolor=nothing)
-        else 
+        else
             plot!(rectangle(24-p, 1, p, p), fill=false, label=nothing, linewidth=2, color=:black, fillcolor=nothing)
             plot!(rectangle(p - 16, 1, 0, p), fill=false, label=nothing, linewidth=2, color=:black, fillcolor=nothing)
         end
@@ -194,7 +194,7 @@ function plot_soc_heatmap(soc_matrix, label)
     savefig(label * "_soc_heatmap.png")
 
 
-end 
+end
 
 function plot_rule_of_thumb_benefits(dt0, test_start_times, test_park_times, benefits_dict, title, index)
     # Create a 24x24 matrix for benefits, initialized with NaN
