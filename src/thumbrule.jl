@@ -118,7 +118,9 @@ function hours_to_drive(dt, drive_starts_time)
         dt_drive = DateTime(Date(dt), drive_starts_time) ## assumes you start driving later that day
     end
 
-    return (dt_drive - dt).value / Hour(1)
+    return (dt_drive - dt).value / 60 / 60 / 1000 ## convert milliseconds to hours
+
+end
 
 function safe_soc_floor(dt, drive_starts_time, soc_floor, drive_time_charge_level)
     timesteps_available = hours_to_drive(dt, drive_starts_time) / timestep
