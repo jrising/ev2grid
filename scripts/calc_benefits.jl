@@ -6,16 +6,18 @@ dt0 = DateTime("2023-07-17T00:00:00")
 drive_starts_time = Time(9, 0, 0)  # Example drive start time
 park_starts_time = Time(17, 0, 0)  # Example park start time
 
+soc_plugged_1 = 0.5
+soc_driving_1 = 0.5
 
 # First, run the stochastic simulation to develop strategy for charging with stochastic events
-# benefits_stoch, strat = run_optimized_stochastic_simulation(dt0, SS, mcdraws, drive_starts_time, park_starts_time)
+benefits_stoch, strat = run_optimized_stochastic_simulation(dt0, SS, drive_starts_time, park_starts_time)
 
-# # # Then, run a bunch of simulations to calculate mean benefits under optimal strategy and rule of thumb with events
-# mean_benefits_optimized, mean_benefits_rot, mean_benefits_rot_baseline = run_rule_of_thumb_stochastic_events_simulation(dt0, strat, mcdraws, drive_starts_time, park_starts_time)
+# # Then, run a bunch of simulations to calculate mean benefits under optimal strategy and rule of thumb with events
+mean_benefits_optimized, mean_benefits_rot, mean_benefits_rot_baseline = run_rule_of_thumb_stochastic_events_simulation(dt0, strat, mcdraws, drive_starts_time, park_starts_time)
 
-# println("Stochastic Optimized Benefits mean: ", mean_benefits_optimized)
-# println("Stochastic Rule of Thumb Benefits mean: ", mean_benefits_rot)
-# println("Baseline Rule of Thumb Benefits mean: ", mean_benefits_rot_baseline)
+println("Stochastic Optimized Benefits mean: ", mean_benefits_optimized)
+println("Stochastic Rule of Thumb Benefits mean: ", mean_benefits_rot)
+println("Baseline Rule of Thumb Benefits mean: ", mean_benefits_rot_baseline)
 
 
 ## create heat map of value for parking and starting driving at different times
