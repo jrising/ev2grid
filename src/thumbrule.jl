@@ -32,7 +32,7 @@ function get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive
     end
 
     ## add safe_charging as a fallback
-    safe_charging(dt1, drive_starts_time, soc_goal, floor, drive_time_charge_level)
+    safe_charging(dt1, soc_plugged_1, drive_starts_time, soc_goal, floor, drive_time_charge_level)
 end
 
 function get_dsoc_thumbrule_baseline(tt, state, drive_time_charge_level)
@@ -43,11 +43,11 @@ function get_dsoc_thumbrule_baseline(tt, state, drive_time_charge_level)
 end
 
 
-function safe_charging(dt, drive_starts_time, soc_goal, soc_floor, drive_time_charge_level)
+function safe_charging(dt, soc_current, drive_starts_time, soc_goal, soc_floor, drive_time_charge_level)
     soc_floor = safe_soc_floor(dt, drive_starts_time, soc_floor, drive_time_charge_level)
     soc_goal = max(soc_goal, soc_floor) ## if the floor is above the goal, set the goal to the floor
 
-    return max(min(soc_goal - soc_plugged_1, timestep * fracpower_max), timestep * fracpower_min)
+    return max(min(soc_goal - soc_current, timestep * fracpower_max), timestep * fracpower_min)
 
 end
 
@@ -98,17 +98,12 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
     if ceiling < floor
         ## no arbitrage case, focus on reg services
         soc_goal = (soc_max- soc_min) / 2
-        df = fullsimulate(dt0, (tt, state) -> safe_charging(tt, state, drive_starts_time, soc_goal, floor, drive_time_charge_level), (tt) -> regrange_value, vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
+        (tt, state) -> safe_charging(tt, state[2], drive_starts_time, soc_goal, floor, drive_time_charge_level), (tt) -> regrange_value
     else
         ## include arbitrage between ceiling and floor
-        df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive_time_charge_level), regrange_func, vehicles_plugged_1,  0.5, 0.5, drive_starts_time, park_starts_time)
+        (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive_time_charge_level), regrange_func
     end
-
-
     ## 4. Offer as regrange min(0.95 - SOC, SOC - 0.3).
-
-    benefits = sum(df[!, "valuep"]) + sum(df[!, "valuer"])
-    return benefits
 end
 
 function hours_to_drive(dt, drive_starts_time)
