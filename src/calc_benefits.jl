@@ -76,6 +76,7 @@ function run_thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_
 
     benefits = sum(df[!, "valuep"]) + sum(df[!, "valuer"])
     return benefits
+end 
 
 function export_to_latex_benefits_table(benefits_dict)
     filename = "results/benefits_table.tex"

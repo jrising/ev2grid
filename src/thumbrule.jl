@@ -59,30 +59,25 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
     # fracpower_max
     ## 2. Get the range left for ROT1 as 0.3 + maxcharge to 0.95 - maxcharge .
     ceiling = soc_max - fracpower_max
-    floor = soc_min + fracpower_min
+    floor = soc_min + fracpower_max
 
-    ## consider the case where the regrange overlaps the edges of the battery
-    if ceiling < drive_time_charge_level
-        ## figure out how many hours of buffer is needed
-        n = (drive_time_charge_level - ceiling) / fracpower_max
-        buffer = ceil(n)
-    else
-        buffer = 0
-    end
 
     regrange_func = (tt) -> begin
         dt1 = dt0 + periodstep(tt)
         current_time = Time(dt1)
+        if tt == 1
+            return 0.0 ## can't offer regrange at the start in case we are at the edge
+        end
         if drive_starts_time <= park_starts_time
             # Don't park on the next day
-            if current_time >= drive_starts_time && current_time <= park_starts_time - Hour(buffer)
+            if current_time >= drive_starts_time && current_time <= park_starts_time
                 return 0.0  # During drive hours
             else
                 return regrange_value  # Outside drive hours
             end
         else
             # Midnight crossing case
-            if current_time >= drive_starts_time || current_time <= park_starts_time - Hour(buffer)
+            if current_time >= drive_starts_time || current_time <= park_starts_time
                 return 0.0  # During drive hours
             else
                 return regrange_value  # Outside drive hours
@@ -95,10 +90,21 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
 
     regrange_value = min(soc_max - soc_min, fracpower_max - fracpower_min) * timestep * vehicles_plugged_1 * vehicle_capacity
 
+    ## consider the cases where as we are charging up to drive_time_charge_level and just after parking we might be down near the edge, so 
+    ## the regrange box shrinks
+
+    if drive_time_charge_level > soc_max - fracpower_max
+        regrange_value = min(soc_max - soc_min, max(0,soc_max - drive_time_charge_level - fracpower_min)) * timestep * vehicles_plugged_1 * vehicle_capacity
+    end
+
+
     if ceiling < floor
         ## no arbitrage case, focus on reg services
         soc_goal = (soc_max- soc_min) / 2
-        (tt, state) -> safe_charging(tt, state[2], drive_starts_time, soc_goal, floor, drive_time_charge_level), (tt) -> regrange_value
+        (tt, state) -> begin
+            dt1 = dt0 + periodstep(tt)
+            safe_charging(dt1, state[2], drive_starts_time, soc_goal, floor, drive_time_charge_level)
+    end, regrange_func
     else
         ## include arbitrage between ceiling and floor
         (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive_time_charge_level), regrange_func
