@@ -4,7 +4,7 @@ function get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive
     vehicles_plugged_1, soc_plugged_1, soc_driving_1 = state
     dt1 = dt0 + periodstep(tt)
 
-    time_available = hours_to_drive(dt1, drive_starts_time)
+    timesteps_available = timesteps_to_drive(dt1, drive_starts_time)
 
     # calculate if a price change occurs before we need to start driving
     # take dt1 and drive_starts_time and test each hour in between for if it switches peak to non peak
@@ -13,8 +13,8 @@ function get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive
     price_switch = false  # Default: No switch found
     current_peak_status = is_peak(dt1)
 
-    for t in 1:time_available
-        dt_check = dt1 + Hour(t)
+    for t in 1:timesteps_available
+        dt_check = dt1 + periodstep(t)
         if is_peak(dt_check) != current_peak_status  # Detects a switch
             price_switch = true
             break  # Exit loop when first switch is found
@@ -32,7 +32,7 @@ function get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive
     end
 
     ## add safe_charging as a fallback
-    safe_charging(dt1, drive_starts_time, soc_goal, floor, drive_time_charge_level)
+    safe_charging(dt1, soc_plugged_1, drive_starts_time, soc_goal, floor, drive_time_charge_level)
 end
 
 function get_dsoc_thumbrule_baseline(tt, state, drive_time_charge_level)
@@ -43,11 +43,11 @@ function get_dsoc_thumbrule_baseline(tt, state, drive_time_charge_level)
 end
 
 
-function safe_charging(dt, drive_starts_time, soc_goal, soc_floor, drive_time_charge_level)
+function safe_charging(dt, soc_current, drive_starts_time, soc_goal, soc_floor, drive_time_charge_level)
     soc_floor = safe_soc_floor(dt, drive_starts_time, soc_floor, drive_time_charge_level)
     soc_goal = max(soc_goal, soc_floor) ## if the floor is above the goal, set the goal to the floor
 
-    return max(min(soc_goal - soc_plugged_1, timestep * fracpower_max), timestep * fracpower_min)
+    return max(min(soc_goal - soc_current, timestep * fracpower_max), timestep * fracpower_min)
 
 end
 
@@ -59,30 +59,26 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
     # fracpower_max
     ## 2. Get the range left for ROT1 as 0.3 + maxcharge to 0.95 - maxcharge .
     ceiling = soc_max - fracpower_max
-    floor = soc_min + fracpower_min
-
-    ## consider the case where the regrange overlaps the edges of the battery
-    if ceiling < drive_time_charge_level
-        ## figure out how many hours of buffer is needed
-        n = (drive_time_charge_level - ceiling) / fracpower_max
-        buffer = ceil(n)
-    else
-        buffer = 0
-    end
+    floor = soc_min + fracpower_max
 
     regrange_func = (tt) -> begin
         dt1 = dt0 + periodstep(tt)
         current_time = Time(dt1)
+        if tt == 1 || timesteps_since_park(dt0, park_starts_time) <= 1 ||
+            timesteps_to_drive(dt0, park_starts_time) <= 1
+            return 0.0 ## can't offer regrange at the start in case we are at the edge
+        end
+
         if drive_starts_time <= park_starts_time
             # Don't park on the next day
-            if current_time >= drive_starts_time && current_time <= park_starts_time - Hour(buffer)
+            if current_time >= drive_starts_time && current_time <= park_starts_time
                 return 0.0  # During drive hours
             else
                 return regrange_value  # Outside drive hours
             end
         else
             # Midnight crossing case
-            if current_time >= drive_starts_time || current_time <= park_starts_time - Hour(buffer)
+            if current_time >= drive_starts_time || current_time <= park_starts_time
                 return 0.0  # During drive hours
             else
                 return regrange_value  # Outside drive hours
@@ -93,36 +89,46 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
     ## 3. If that’s a negative range, then just do ROT1 with a 0.625 target.
     ## If it's a positive range, allow arbitrage within the range and regrange + frac_power_max up to 0.95 - frac_power_min to 0.3
 
-    regrange_value = min(soc_max - soc_min, fracpower_max - fracpower_min) * timestep * vehicles_plugged_1 * vehicle_capacity
+    regrange_value = min((soc_max - soc_min) / 2, fracpower_max, -fracpower_min) * timestep * vehicles_plugged_1 * vehicle_capacity
+
+    ## consider the cases where as we are charging up to drive_time_charge_level and just after parking we might be down near the edge, so
+    ## the regrange box shrinks
 
     if ceiling < floor
         ## no arbitrage case, focus on reg services
-        soc_goal = (soc_max- soc_min) / 2
-        df = fullsimulate(dt0, (tt, state) -> safe_charging(tt, state, drive_starts_time, soc_goal, floor, drive_time_charge_level), (tt) -> regrange_value, vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
+        soc_goal = (soc_max + soc_min) / 2
+        (tt, state) -> begin
+            dt1 = dt0 + periodstep(tt)
+            safe_charging(dt1, state[2], drive_starts_time, soc_goal, soc_min, drive_time_charge_level)
+    end, regrange_func
     else
         ## include arbitrage between ceiling and floor
-        df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive_time_charge_level), regrange_func, vehicles_plugged_1,  0.5, 0.5, drive_starts_time, park_starts_time)
+        (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive_time_charge_level), regrange_func
     end
-
-
     ## 4. Offer as regrange min(0.95 - SOC, SOC - 0.3).
-
-    benefits = sum(df[!, "valuep"]) + sum(df[!, "valuer"])
-    return benefits
 end
 
-function hours_to_drive(dt, drive_starts_time)
+function timesteps_to_drive(dt, drive_starts_time)
     if drive_starts_time < Time(dt)
         dt_drive = DateTime(Date(dt) + Day(1), drive_starts_time) ## assumes you start driving the next day
     else
         dt_drive = DateTime(Date(dt), drive_starts_time) ## assumes you start driving later that day
     end
 
-    return (dt_drive - dt).value / 60 / 60 / 1000 ## convert milliseconds to hours
+    return ceil(Int64, (dt_drive - dt).value / 60 / 60 / 1000 / timestep) ## convert milliseconds to hours
+end
 
+function timesteps_since_park(dt, park_starts_time)
+    if park_starts_time < Time(dt)
+        dt_park = DateTime(Date(dt), park_starts_time) ## assumes you park earlier that day
+    else
+        dt_park = DateTime(Date(dt) - Day(1), park_starts_time) ## assumes you parked the previous day
+    end
+
+    return floor(Int64, (dt - dt_park).value / 60 / 60 / 1000 / timestep) ## convert milliseconds to hours
 end
 
 function safe_soc_floor(dt, drive_starts_time, soc_floor, drive_time_charge_level)
-    timesteps_available = hours_to_drive(dt, drive_starts_time) / timestep
+    timesteps_available = timesteps_to_drive(dt, drive_starts_time)
     return max(soc_floor, drive_time_charge_level - fracpower_max * (timesteps_available - 1))
 end
