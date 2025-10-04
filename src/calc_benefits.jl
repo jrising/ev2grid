@@ -16,7 +16,8 @@ include("optfuncs.jl")
 
 
 function run_rule_of_thumb_simulation(dt0, drive_starts_time, park_starts_time)
-    df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time), (tt) -> 0., 0., 0.5, 0.5, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
+    df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, soc_min, soc_max, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
     benefits = sum(df[!, "valuep"])
 
     return benefits
@@ -27,20 +28,35 @@ function rectangle(w, h, x, y)
 end
 
 function run_optimized_simulation(dt0, SS, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
     global mcdraws = 1
     @time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
 
-    df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_starts_time, park_starts_time)
+    df = fullsimulate(dt0, strat, zeros(SS-1), vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
     benefits = sum(df[!, "valuep"])
 
     return benefits
 end
 
+function run_optimized_regrange_simulation(dt0, SS, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
+
+    probstate = optimize_regrange_probstate_outer_loop(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time)
+    strat, probfail, optregrange = optimize_regrange_probstate(dt0, probstate, drive_starts_time, park_starts_time);
+
+    df = fullsimulate(dt0, strat, optregrange, vehicles_plugged_1, soc_plugged_1, 0., drive_starts_time, park_starts_time)
+    df[!, :optregrange] = [0.; optregrange]
+    benefits = sum(df[!, "valuep"]) + sum(df[!, "valuer"])
+    return benefits
+end
+
+
 function run_optimized_stochastic_simulation(dt0, SS, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
     global mcdraws = 100
     @time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
 
-    df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_starts_time, park_starts_time, true)
+    df = fullsimulate(dt0, strat, zeros(SS-1), vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time, true)
     benefits = sum(df[!, "valuep"]) ## conduct a single run for a simulation with stochastic events
 
     # open("event_log_debug.txt", "w") do io ## to help with debugging print out event_log
@@ -52,6 +68,15 @@ function run_optimized_stochastic_simulation(dt0, SS, drive_starts_time, park_st
     return benefits, strat
 end
 
+function run_thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time_charge_level)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
+
+    dsoc_func, regrange_func = thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time_charge_level)
+    df = fullsimulate(dt0, dsoc_func, regrange_func, vehicles_plugged_1,  0.5, 0.5, drive_starts_time, park_starts_time)
+
+    benefits = sum(df[!, "valuep"]) + sum(df[!, "valuer"])
+    return benefits
+end 
 
 function export_to_latex_benefits_table(benefits_dict)
     filename = "results/benefits_table.tex"
@@ -115,17 +140,19 @@ function run_rule_of_thumb_stochastic_events_simulation(dt0, strat, mcdraws, dri
     benefits_list_rot = []
     benefits_list_rot_baseline = []
 
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
+
     for mc in mcdraws
         ## first simulate stochastic events and calculate
-        df = fullsimulate(dt0, strat, zeros(SS-1), 0., 0.5, 0.5, drive_starts_time, park_starts_time)
+        df = fullsimulate(dt0, strat, zeros(SS-1), vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
         benefits_stoch = sum(df[!, "valuep"])
         push!(benefits_list_optimized, benefits_stoch)
         # pass events from event_log into rule of thumb simulation
         events = event_log
-        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time), (tt) -> 0., 0., 0.5, 0.5, drive_starts_time, park_starts_time; events=events)
+        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, soc_min, soc_max, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time; events=events)
         benefits_rot = sum(df[!, "valuep"])
         push!(benefits_list_rot, benefits_rot)
-        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule_baseline(tt, state, drive_starts_time), (tt) -> 0., 0., 0.5, 0.5, drive_starts_time, park_starts_time; events=events)
+        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule_baseline(tt, state, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time; events=events)
         benefits_rot_baseline = sum(df[!, "valuep"])
         push!(benefits_list_rot_baseline, benefits_rot_baseline)
 
@@ -158,14 +185,14 @@ function plot_soc_heatmap(soc_matrix, label)
         title = label,
         colorbar_title = "SOC",
         aspect_ratio = 1,
-        c=:viridis, 
-        xlims=(0,23), 
+        c=:viridis,
+        xlims=(0,23),
         ylims=(0,23))
 
     for p in 0:23
         if p < 16
             plot!(rectangle(8, 1, p, p), fill=false, label=nothing, linewidth=2, color=:black, fillcolor=nothing)
-        else 
+        else
             plot!(rectangle(24-p, 1, p, p), fill=false, label=nothing, linewidth=2, color=:black, fillcolor=nothing)
             plot!(rectangle(p - 16, 1, 0, p), fill=false, label=nothing, linewidth=2, color=:black, fillcolor=nothing)
         end
@@ -176,7 +203,7 @@ function plot_soc_heatmap(soc_matrix, label)
     savefig(label * "_soc_heatmap.png")
 
 
-end 
+end
 
 function plot_rule_of_thumb_benefits(dt0, test_start_times, test_park_times, benefits_dict, title, index)
     # Create a 24x24 matrix for benefits, initialized with NaN

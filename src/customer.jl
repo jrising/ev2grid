@@ -31,6 +31,9 @@ fracpower_min = -max_charging_kw / vehicle_capacity # discharge in terms of frac
 fracpower_max = max_charging_kw / vehicle_capacity # charging in terms of fraction of energy
 efficiency = 0.95 # EFF
 
+# Level of charge required when begin driving
+drive_time_charge_level = 0.8
+
 """
     soc_scheduled(dt::DateTime, drive_starts_time::Time) -> Float64
 
@@ -72,4 +75,19 @@ function smart_config(FF_proposed)
     soln = findmin(abs.(aas - round.(aas)))
 
     return Int64(FF_options[soln[2]])
+end
+
+"""
+Function to check whether to start vehicles plugged in or not depending on drive and park times
+inputs: dt0, drive_start, park_start
+output: vehicles_plugged1
+"""
+function vehicles_plugged_scheduled(dt::DateTime, drive_starts_time::Time, park_starts_time::Time)
+    if drive_starts_time < park_starts_time # e.g., start driving at 9am, park at 5pm
+        is_plugged = Time(dt) < drive_starts_time || Time(dt) ≥ park_starts_time
+    else # e.g., start driving at 5pm, park at 9am.
+        is_plugged = park_starts_time ≤ Time(dt) < drive_starts_time
+    end
+
+    return is_plugged ? vehicles : 0.
 end
