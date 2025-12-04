@@ -163,7 +163,7 @@ Returns the park time, for the current driving
 """
 function get_park_time(dt1::DateTime, drive_starts_time, park_starts_time)
     # find if the park date is today or tomorrow
-    if hour(park_starts_time) < hour(drive_starts_time) && hour(dt1) > hour(drive_starts_time)
+    if hour(park_starts_time) < hour(drive_starts_time) && hour(dt1) ≥ hour(drive_starts_time)
         date_part_tomorrow = Dates.Date(dt1) + Dates.Day(1)
         return DateTime(date_part_tomorrow, park_starts_time)
     else

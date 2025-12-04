@@ -52,7 +52,7 @@ function safe_charging(dt, soc_current, drive_starts_time, soc_goal, soc_floor, 
 end
 
 function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time_charge_level)
-    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
 
     # ## allow energy arbitrage so long as there is space in the middle of your charging rate band to fluctuate as opposed to being fixed at 0.625 when at level 3 charging.
     # ## 1. Calculate how much we can charge in 1 period.

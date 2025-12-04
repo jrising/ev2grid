@@ -16,7 +16,7 @@ include("optfuncs.jl")
 
 
 function run_rule_of_thumb_simulation(dt0, drive_starts_time, park_starts_time)
-    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
     df = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, soc_min, soc_max, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
     benefits = sum(df[!, "valuep"])
 
@@ -28,7 +28,7 @@ function rectangle(w, h, x, y)
 end
 
 function run_optimized_simulation(dt0, SS, drive_starts_time, park_starts_time)
-    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
     global mcdraws = 1
     @time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
 
@@ -39,7 +39,7 @@ function run_optimized_simulation(dt0, SS, drive_starts_time, park_starts_time)
 end
 
 function run_optimized_regrange_simulation(dt0, SS, drive_starts_time, park_starts_time)
-    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
 
     probstate = optimize_regrange_probstate_outer_loop(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time)
     strat, probfail, optregrange = optimize_regrange_probstate(dt0, probstate, drive_starts_time, park_starts_time);
@@ -52,7 +52,7 @@ end
 
 
 function run_optimized_stochastic_simulation(dt0, SS, drive_starts_time, park_starts_time)
-    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
     global mcdraws = 100
     @time strat, VV = optimize(dt0, SS, drive_starts_time, park_starts_time);
 
@@ -69,14 +69,14 @@ function run_optimized_stochastic_simulation(dt0, SS, drive_starts_time, park_st
 end
 
 function run_thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time_charge_level)
-    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
 
     dsoc_func, regrange_func = thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time_charge_level)
     df = fullsimulate(dt0, dsoc_func, regrange_func, vehicles_plugged_1,  0.5, 0.5, drive_starts_time, park_starts_time)
 
     benefits = sum(df[!, "valuep"]) + sum(df[!, "valuer"])
     return benefits
-end 
+end
 
 function export_to_latex_benefits_table(benefits_dict)
     filename = "results/benefits_table.tex"
@@ -140,7 +140,7 @@ function run_rule_of_thumb_stochastic_events_simulation(dt0, strat, mcdraws, dri
     benefits_list_rot = []
     benefits_list_rot_baseline = []
 
-    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
 
     for mc in mcdraws
         ## first simulate stochastic events and calculate

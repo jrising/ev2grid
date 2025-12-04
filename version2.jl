@@ -30,7 +30,7 @@ mcdraws = 1
 drive_starts_time = Dates.Time(9, 0, 0)
 park_starts_time = Dates.Time(17, 0, 0)
 
-vehicles_plugged_1 = vehicles_plugged_scheduled(dt0, drive_starts_time, park_starts_time)
+vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
 
 
 probstate = optimize_regrange_probstate_outer_loop(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time)
