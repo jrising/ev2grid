@@ -12,7 +12,7 @@ source("~/projects/research-common/R/felm-tools.R")
 do.preanalysis <- F
 
 year.min <- 2018
-year.max <- 2024
+year.max <- 2026
 
 df <- data.frame()
 for (year in year.min:(year.max-1))

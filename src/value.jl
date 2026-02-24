@@ -9,6 +9,7 @@ ratio_exponent = 0.5
 
 pricedf = CSV.read(joinpath(@__DIR__, "../data/predprice.csv"), DataFrame)
 pricedf[!, :datetime] = DateTime.(replace.(pricedf.datetime, " " => "T"))
+pricedf.predpe = pricedf.predpe / 1000 # $/MWh -> $/kWh
 
 """
 Calculates the value of having energy at a certain level. The function considers the proportion of energy below
