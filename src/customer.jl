@@ -31,6 +31,9 @@ fracpower_min = -max_charging_kw / vehicle_capacity # discharge in terms of frac
 fracpower_max = max_charging_kw / vehicle_capacity # charging in terms of fraction of energy
 efficiency = 0.95 # EFF
 
+## Period for energy-neutrality (in hours)
+regneutral = 0.5 # PJM 30-minutes
+
 # Level of charge required when begin driving
 drive_time_charge_level = 0.8
 
