@@ -1,3 +1,4 @@
+using Random
 include("bizutils.jl")
 include("value.jl")
 include("retail.jl")
@@ -22,8 +23,8 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
     soc1_byaction = soc0_byaction .+ dsoc;
 
     # STEP 1: Calculate V[S] under every scenario
-    soc_needed = soc_scheduled(dt0 + periodstep(SS), drive_starts_time)
-    vehicle_split = split_below.(soc_range, soc_needed)
+    soc_needed = soc_scheduled(dt0 + periodstep(SS), drive_starts_time);
+    vehicle_split = split_below.(soc_range, soc_needed);
     value_energy_bysoc = [value_energy(vehicle_split[ff][1], vehicle_split[ff][3], soc_needed, vehicles_plugged_range[ee]) for ee=1:EE, ff=1:FF]
     VV2 = repeat(reshape(value_energy_bysoc, EE, FF, 1), 1, 1, FF)
     VVall[end, :, :, :] = VV2
@@ -45,7 +46,6 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
         soc_needed = soc_scheduled(dt1, drive_starts_time)
         vehicle_split = split_below.(soc_range, soc_needed);
         valuepns = [value_power_newstate(price, vehicle_split[ff12][1], soc_needed - vehicle_split[ff12][2], vehicles_plugged_range[ee]) for ee=1:EE, ff12=1:FF];
-        vehicle_split = split_below.(soc_range, soc_needed);
         valuee = [value_energy(vehicle_split[ff12][1], vehicle_split[ff12][3], soc_needed, vehicles_plugged_range[ee]) for ee=1:EE, ff12=1:FF];
 
         ff12_byaction = discrete_roundbelow.(soc1_byaction, soc_min, soc_max, FF);
@@ -304,7 +304,6 @@ function optimize_regrange_given(dt0::DateTime, regrange::Vector{Float64},  driv
     energy_minallow = [vehicle_capacity * vehicles_plugged_range[ee] * (1. - vehicle_split[ff][1]) * 0.3 for ee=1:EE, ff=1:FF];
     energy_maxallow = [vehicle_capacity * vehicles_plugged_range[ee] * (1. - vehicle_split[ff][1]) * 0.95 for ee=1:EE, ff=1:FF];
     energy_bystate = [vehicle_capacity * vehicles_plugged_range[ee] * (1. - vehicle_split[ff][1]) * vehicle_split[ff][3] for ee=1:EE, ff=1:FF];
-    energy_maxregrange_bystate = min.(energy_maxallow .- energy_bystate, energy_bystate - energy_minallow);
 
     probfail = zeros(Float64, EE, FF, FF); # Sum over periods looking forward
 
@@ -391,10 +390,11 @@ function optimize_regrange_given_outer_loop(dt0, soc_plugged_1, soc_driving_1, v
         df[!, :energy_minallow] = vehicle_capacity .* df.vehicles_plugged .* (1 .- df.portion_below) * 0.3
         df[!, :energy_maxallow] = vehicle_capacity .* df.vehicles_plugged .* (1 .- df.portion_below) * 0.95
         df[!, :regrange_avail] = min.(df.energy_maxallow .- df.energy_soc, df.energy_soc .- df.energy_minallow)
-        df[!, :regrange_maxrange] = ((df.energy_maxallow .- df.energy_minallow) / 2) .* (1. .- disallows)
+        df[!, :regrange_maxrange] = min.(max_charging_kw .* df.vehicles_plugged .* (1 .- df.portion_below) *
+                                         regneutral, df.regrange_avail) .* (1. .- disallows)
     end
 
-    df = fullsimulate(dt0, zeros(SS-1), vehicles_plugged_1, 0.8, 0.8) # Make sure all can drive
+    df = fullsimulate(dt0, zeros(SS-1), vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time) # Make sure all can drive
     # Don't allow regrange when vehicles return, because no time to recharge if very low energy
     # Don't allow in period that vehicles leave, because they aren't there by end of period
     disallows = [false; df.vehicles_plugged[2:end] - df.vehicles_plugged[1:end-1] .> 1.0] .| [df.vehicles_plugged[2:end] - df.vehicles_plugged[1:end-1] .< -1.0; false];
@@ -403,7 +403,7 @@ function optimize_regrange_given_outer_loop(dt0, soc_plugged_1, soc_driving_1, v
 
     regrange = df.regrange_avail .* (1. .- disallows)
 
-    df = fullsimulate(dt0, ones(Int, SS-1, EE, FF, FF), regrange, vehicles_plugged_1, 0.8, 0.8)
+    df = fullsimulate(dt0, ones(Int, SS-1, EE, FF, FF), regrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)
     calcmaxrange!(df)
 
     valuebest = calcvalue(df, regrange)
@@ -414,9 +414,9 @@ function optimize_regrange_given_outer_loop(dt0, soc_plugged_1, soc_driving_1, v
     for ll in 1:10000
         println("Loop $(ll)")
         Random.seed!(20240826);
-        strat, probfail = optimize(dt0, regrange);
+        strat, probfail = optimize_regrange_given(dt0, regrange, drive_starts_time, park_starts_time);
 
-        local df = fullsimulate(dt0, strat, regrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, mcdraws > 1);
+        local df = fullsimulate(dt0, strat, regrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time, mcdraws > 1);
         value = calcvalue(df, regrange)
 
         if value > valuebest
