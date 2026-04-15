@@ -89,7 +89,7 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
     ## 3. If that’s a negative range, then just do ROT1 with a 0.625 target.
     ## If it's a positive range, allow arbitrage within the range and regrange + frac_power_max up to 0.95 - frac_power_min to 0.3
 
-    regrange_value = min((soc_max - soc_min) / 2, fracpower_max, -fracpower_min) * timestep * vehicles_plugged_1 * vehicle_capacity
+    regrange_value = min((soc_max - soc_min) / 2, fracpower_max, -fracpower_min) * regneutral * vehicles_plugged_1 * vehicle_capacity
 
     ## consider the cases where as we are charging up to drive_time_charge_level and just after parking we might be down near the edge, so
     ## the regrange box shrinks
