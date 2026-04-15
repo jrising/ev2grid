@@ -42,28 +42,25 @@ df_day = df[df['datetime'].dt.date == pd.to_datetime("2023-07-17").date()].copy(
 
 plot2 = (ggplot(df_day, aes(x='plot_time')) +
          # Regulation range ribbons
-         geom_ribbon(aes(ymin='reg_lower', ymax='reg_upper', fill='Approach'), 
+         geom_ribbon(aes(ymin='reg_lower', ymax='reg_upper', fill='Approach'),
                      alpha=0.25) +
          # SOC lines
          geom_line(aes(y='soc_plugged', color='Approach'), size=1) +
          # Driving period markers
          geom_vline(xintercept=[datetime(2023, 7, 17, 9, 0, 0),
-                                datetime(2023, 7, 17, 17, 0, 0)],
-                    linetype='dashed', color='gray') +
+                                datetime(2023, 7, 17, 17, 0, 0)]) +
          # SOC limits
-         geom_hline(yintercept=[SOC_MIN, SOC_MAX], linetype='dotted', 
+         geom_hline(yintercept=[SOC_MIN, SOC_MAX], linetype='dotted',
                     color='red', alpha=0.5) +
-         scale_x_datetime(date_labels='%H:%M',
+         scale_x_datetime(date_labels='%H:%M', expand=(0, 0),
                          limits=[datetime(2023, 7, 17, 0, 0, 0),
                                 datetime(2023, 7, 18, 0, 0, 0)]) +
          scale_y_continuous(limits=[0, 1], breaks=[0, 0.3, 0.5, 0.7, 0.95, 1]) +
          labs(x=None, y='State of Charge (SOC)',
-              title='Comparison of SOC and Regulation Range Across Strategies',
-              fill='Regulation Band', color='SOC') +
-         theme_bw() +
-         theme(legend_position='bottom'))
+              fill='Regulation band:', color='Approach:') +
+         theme_bw())
 
 print(plot2)
-plot2.save(filename=str(PLOTS_DIR / "soc_regrange_comparison.png"), 
-           width=12, height=6, dpi=300)
+plot2.save(filename=str(PLOTS_DIR / "soc_regrange_comparison.png"),
+           width=10, height=6, dpi=300)
 
