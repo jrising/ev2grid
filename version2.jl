@@ -40,6 +40,6 @@ df = fullsimulate(dt0, strat, optregrange, vehicles_plugged_1, soc_plugged_1, 0.
 df[!, :optregrange] = [0.; optregrange]
 
 pp = plot_standard(df)
-plot!(pp, df.datetime, df.soc_plugged, ribbon=df.optregrange / (vehicles * vehicle_capacity), label="Reg. Range")
+plot!(pp, df.datetime, df.soc_plugged, ribbon=(regneutral / 2) * df.optregrange / (vehicles * vehicle_capacity), label="Reg. Range")
 plot!(size=(700,400))
 savefig("optregrange-v1.pdf")

@@ -66,16 +66,16 @@ print(optregrange)
 
 df1 = fullsimulate(dt0, strat, optregrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)
 df1[!, :Approach] .= "Optimized"
-df1[!, :regrange_kwh] = [0.; optregrange]  # Add regrange column
+df1[!, :regrange_kw] = [0.; optregrange]  # Add regrange column
 
 dsoc_func, regrange_func = thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time_charge_level)
 df2 = fullsimulate(dt0, dsoc_func, regrange_func, vehicles_plugged_1,  soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)
 df2[!, :Approach] .= "Rule of Thumb"
-df2[!, :regrange_kwh] = [regrange_func(tt) for tt in 1:SS]  
+df2[!, :regrange_kw] = [regrange_func(tt) for tt in 1:SS]
 
 df3 = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule_baseline(tt, state, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)
 df3[!, :Approach] .= "Baseline"
-df3[!, :regrange_kwh] = zeros(SS)  # Baseline offers no regulation
+df3[!, :regrange_kw] = zeros(SS)  # Baseline offers no regulation
 
 CSV.write("results/bytime_regrange.csv", [df1; df2; df3])
 
@@ -93,18 +93,18 @@ for drive_starts_hour in 1:23
     df1 = fullsimulate(dt0, strat, optregrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)
     df1[!, :Approach] .= "Optimized"
     df1[!, :start_hour] .= drive_starts_hour
-    df1[!, :regrange_kwh] = [0.; optregrange]  # Add regrange column
+    df1[!, :regrange_kw] = [0.; optregrange]  # Add regrange column
 
     dsoc_func, regrange_func = thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time_charge_level)
     df2 = fullsimulate(dt0, dsoc_func, regrange_func, vehicles_plugged_1,  soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)
     df2[!, :Approach] .= "Rule of Thumb"
     df2[!, :start_hour] .= drive_starts_hour
-    df2[!, :regrange_kwh] = [regrange_func(tt) for tt in 1:SS]  # Add regrange column
+    df2[!, :regrange_kw] = [regrange_func(tt) for tt in 1:SS]  # Add regrange column
 
     df3 = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule_baseline(tt, state, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)
     df3[!, :Approach] .= "Baseline"
     df3[!, :start_hour] .= drive_starts_hour
-    df3[!, :regrange_kwh] = zeros(SS)  # Baseline offers no regulation
+    df3[!, :regrange_kw] = zeros(SS)  # Baseline offers no regulation
 
     push!(alldf, df1)
     push!(alldf, df2)

@@ -112,25 +112,24 @@ function optimize_regrange_probstate(dt0::DateTime, probstate::Array{Float64, 4}
     # Construct exogenous change levels
     dsoc_FF = [make_actions(soc_plugged, soc_range) for soc_plugged=soc_range];
     dsoc = [dsoc_FF[ff][pp] for pp=1:PP, vehicles_plugged=vehicles_plugged_range, ff=1:FF, soc_driving=soc_range];
-    energy_dsoc_byact = [vehicles_plugged_range[ee] * vehicle_capacity * dsoc[pp, ee, ff1, ff2] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF]
+    energy_dsoc_byact = [vehicles_plugged_range[ee] * vehicle_capacity * dsoc[pp, ee, ff1, ff2] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
     soc0_byaction = repeat(reshape(soc_range, 1, 1, FF, 1), PP, EE, 1, FF);
     soc1_byaction = soc0_byaction .+ dsoc;
 
     # STEP 1: Calculate V[S] under every scenario
-    soc_needed = soc_scheduled(dt0 + periodstep(SS), drive_starts_time)
-    vehicle_split = split_below.(soc_range, soc_needed)
-    value_energy_bysoc = [value_energy(vehicle_split[ff][1], vehicle_split[ff][3], soc_needed, vehicles_plugged_range[ee]) for ee=1:EE, ff=1:FF]
-    VV2 = repeat(reshape(value_energy_bysoc, EE, FF, 1), 1, 1, FF)
+    soc_needed = soc_scheduled(dt0 + periodstep(SS), drive_starts_time);
+    vehicle_split = split_below.(soc_range, soc_needed);
+    value_energy_bysoc = [value_energy(vehicle_split[ff][1], vehicle_split[ff][3], soc_needed, vehicles_plugged_range[ee]) for ee=1:EE, ff=1:FF];
+    VV2 = repeat(reshape(value_energy_bysoc, EE, FF, 1), 1, 1, FF);
 
     # Determine the energy available for each state
     # Assumes same soc_needed as midnight
-    energy_minallow = [vehicle_capacity * vehicles_plugged_range[ee] * (1. - vehicle_split[ff][1]) * 0.3 for ee=1:EE, ff=1:FF]
-    energy_maxallow = [vehicle_capacity * vehicles_plugged_range[ee] * (1. - vehicle_split[ff][1]) * 0.95 for ee=1:EE, ff=1:FF]
-    energy_bystate = [vehicle_capacity * vehicles_plugged_range[ee] * (1. - vehicle_split[ff][1]) * vehicle_split[ff][3] for ee=1:EE, ff=1:FF]
-    energy_maxregrange_bystate = min.(energy_maxallow .- energy_bystate, energy_bystate - energy_minallow)
+    energy_minallow = [vehicle_capacity * vehicles_plugged_range[ee] * (1. - vehicle_split[ff][1]) * 0.3 for ee=1:EE, ff=1:FF];
+    energy_maxallow = [vehicle_capacity * vehicles_plugged_range[ee] * (1. - vehicle_split[ff][1]) * 0.95 for ee=1:EE, ff=1:FF];
+    energy_bystate = [vehicle_capacity * vehicles_plugged_range[ee] * (1. - vehicle_split[ff][1]) * vehicle_split[ff][3] for ee=1:EE, ff=1:FF];
 
-    regrange_range = collect(range(0., min(max_charging_kw * vehicles * regneutral, maximum(energy_maxregrange_bystate)), RR))
+    regrange_range = collect(range(0., max_charging_kw * vehicles, RR)); # Measured in kW
 
     probfail = zeros(Float64, EE, FF, FF); # Sum over periods looking forward
 
@@ -164,11 +163,12 @@ function optimize_regrange_probstate(dt0::DateTime, probstate::Array{Float64, 4}
             VV1byactsummc = zeros(Float64, PP, EE, FF, FF);
             probfailsummc = zeros(Float64, PP, EE, FF, FF);
 
-            regrange_good = [(energy_bystate[ee, ff] .- regrange .>= energy_minallow[ee, ff]) .& (energy_bystate[ee, ff] .+ regrange .<= energy_maxallow[ee, ff]) .& (regrange .<= max_charging_kw * vehicles_plugged_range[ee] * regneutral) for ee=1:EE, ff=1:FF]
+            regrange_maxenergychange = regrange * (regneutral / 2)
+            regrange_good = [(energy_bystate[ee, ff] .- regrange_maxenergychange .>= energy_minallow[ee, ff]) .& (energy_bystate[ee, ff] .+ regrange_maxenergychange .<= energy_maxallow[ee, ff]) .& (regrange .<= max_charging_kw * vehicles_plugged_range[ee]) for ee=1:EE, ff=1:FF]
             regrange_fail_bystate = 1. .- repeat(regrange_good, 1, 1, FF);
             regrange_fail_byact = repeat(reshape(regrange_fail_bystate, 1, EE, FF, FF), PP);
             # Also disallow actions that would overextend our total charge range
-            regrange_good_byact = [(energy_bystate[ee, ff1] .- regrange + energy_dsoc_byact[pp, ee, ff1, ff2] .> energy_minallow[ee, ff1]) .& (energy_bystate[ee, ff1] .+ regrange + energy_dsoc_byact[pp, ee, ff1, ff2] .< energy_maxallow[ee, ff1]) .& (regneutral * abs(energy_dsoc_byact[pp, ee, ff1, ff2]) / vehicles_plugged_range[ee] <= max_charging_kw) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF]
+            regrange_good_byact = [(energy_bystate[ee, ff1] .- regrange_maxenergychange + energy_dsoc_byact[pp, ee, ff1, ff2] .>= energy_minallow[ee, ff1]) .& (energy_bystate[ee, ff1] .+ regrange_maxenergychange + energy_dsoc_byact[pp, ee, ff1, ff2] .<= energy_maxallow[ee, ff1]) .& (abs(energy_dsoc_byact[pp, ee, ff1, ff2] / vehicles_plugged_range[ee]) / timestep <= max_charging_kw - regrange / vehicles_plugged_range[ee]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF]
 
             for mc in 1:mcdraws
                 if mcdraws == 1
@@ -225,6 +225,8 @@ function optimize_regrange_probstate(dt0::DateTime, probstate::Array{Float64, 4}
 end
 
 function optimize_regrange_probstate_outer_loop(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time)
+    ## probstate is TIME x vehicles_plugged x soc_plugged x soc_driving
+
     global probstate = zeros(SS-1, EE, FF, FF);
     df = fullsimulate(dt0, zeros(SS-1), vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)
     for ii in 1:(nrow(df) - 1)
@@ -247,7 +249,6 @@ function optimize_regrange_probstate_outer_loop(dt0, soc_plugged_1, soc_driving_
             energy = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) .* df.soc_above
             energy_minallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.3
             energy_maxallow = vehicle_capacity * df.vehicles_plugged .* (1 .- df.portion_below) * 0.95
-            df[!, :regrange_avail] = min.(energy_maxallow - energy, energy - energy_minallow)
 
             if dfall == nothing
                 dfall = df
@@ -328,11 +329,12 @@ function optimize_regrange_given(dt0::DateTime, regrange::Vector{Float64},  driv
         pricedfrow = pricedf[pricedf.datetime .== dt1, :] # only works if timestep is whole hours
         regprice = pricedfrow.predpe[1] # XXX: Later use uncertainty
 
-        regrange_good = (energy_bystate .- regrange[tt] .> energy_minallow) .& (energy_bystate .+ regrange[tt] .< energy_maxallow)
+        regrange_maxenergychange = regrange[tt] * (regneutral / 2)
+        regrange_good = (energy_bystate .- regrange_maxenergychange .>= energy_minallow) .& (energy_bystate .+ regrange_maxenergychange .<= energy_maxallow)
         regrange_fail_bystate = 1. .- repeat(regrange_good, 1, 1, FF);
         regrange_fail_byact = repeat(reshape(regrange_fail_bystate, 1, EE, FF, FF), PP);
         # Also disallow actions that would overextend our total charge range
-        regrange_good_byact = [(energy_bystate[ee, ff1] .- regrange[tt] + energy_dsoc_byact[pp, ee, ff1, ff2] .> energy_minallow[ee, ff1]) .& (energy_bystate[ee, ff1] .+ regrange[tt] + energy_dsoc_byact[pp, ee, ff1, ff2] .< energy_maxallow[ee, ff1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+        regrange_good_byact = [(energy_bystate[ee, ff1] .- regrange_maxenergychange + energy_dsoc_byact[pp, ee, ff1, ff2] .>= energy_minallow[ee, ff1]) .& (energy_bystate[ee, ff1] .+ regrange_maxenergychange + energy_dsoc_byact[pp, ee, ff1, ff2] .<= energy_maxallow[ee, ff1]) .& ((regneutral / 2) * abs(energy_dsoc_byact[pp, ee, ff1, ff2]) / vehicles_plugged_range[ee] <= max_charging_kw - regrange) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
         VV1byactsummc = zeros(Float64, PP, EE, FF, FF);
         probfailsummc = zeros(Float64, PP, EE, FF, FF);

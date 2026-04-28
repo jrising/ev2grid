@@ -13,16 +13,17 @@ SOC_MIN = 0.3
 SOC_MAX = 0.95
 VEHICLE_CAPACITY = 75.7  # kWh
 NUM_VEHICLES = 4
+REGNEUTRAL = 0.5
 
 # Read the regulation range data
 df = pd.read_csv("results/bytime_regrange.csv")
 df['datetime'] = pd.to_datetime(df['datetime'])
 
-# Convert regrange_kwh to regrange_soc (SOC units)
-# regrange_kwh is in kWh, convert to fraction of total plugged capacity
+# Convert regrange_kw to regrange_soc (SOC units)
+# regrange_kw is in kW, convert to fraction change of total plugged capacity
 df['regrange_soc'] = np.where(
     df['vehicles_plugged'] > 0,
-    df['regrange_kwh'] / (df['vehicles_plugged'] * VEHICLE_CAPACITY),
+    (REGNEUTRAL / 2) * df['regrange_kw'] / (df['vehicles_plugged'] * VEHICLE_CAPACITY),
     0
 )
 
