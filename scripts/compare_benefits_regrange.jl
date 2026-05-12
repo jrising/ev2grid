@@ -77,7 +77,7 @@ df3 = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule_baseline(tt, state, dr
 df3[!, :Approach] .= "Baseline"
 df3[!, :regrange_kw] = zeros(SS)  # Baseline offers no regulation
 
-CSV.write("results/bytime_regrange.csv", [df1; df2; df3])
+CSV.write("../results/bytime_regrange.csv", [df1; df2; df3])
 
 alldf = []
 for drive_starts_hour in 1:23

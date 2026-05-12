@@ -61,7 +61,8 @@ plot2 = (ggplot(df_day, aes(x='plot_time')) +
               fill='Regulation band:', color='Approach:') +
          theme_bw())
 
-print(plot2)
+plot2.show()
+
 plot2.save(filename=str(PLOTS_DIR / "soc_regrange_comparison.png"),
            width=10, height=6, dpi=300)
 
