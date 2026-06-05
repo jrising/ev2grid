@@ -43,13 +43,13 @@ ggsave("plots_R_regrange/power_costs_by_approach.png", plot = p2, width = 10, he
 df <- read.csv("results/bytime-xstart_regrange.csv")
 
 p3 <- ggplot(df %>% filter(as.Date(datetime) == "2023-07-17") %>% group_by(start_hour, Approach) %>%
-       summarize(value=sum(valuep)), aes(start_hour, value, colour=Approach)) +
+       summarize(value=sum(valuep + valuepns + valuee + valuer)), aes(start_hour, value, colour=Approach)) +
     geom_line() +
     geom_vline(xintercept=c(12, 20)) +
     scale_x_continuous("Driving start hour", expand=c(0, 0),
                        breaks=seq(4, 24, by=4), labels=c(paste(seq(4, 11, by=4), "AM"), paste(seq(12, 24, by=4), "PM"))) +
                                                     theme_bw() + xlab(NULL) +
-    ylab("Value of energy arbitrage")
+    ylab("Total value")
 
 ggsave("plots_R_regrange/value_by_start_hour.png", plot = p3, width = 10, height = 6, dpi = 300)
 
