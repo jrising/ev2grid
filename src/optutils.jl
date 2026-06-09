@@ -216,3 +216,9 @@ function combinebyact(VV2::Array{Float64, 3}, state2base::Array{Tuple{Int64, Int
 
     VV1byactthismc = ((probbase1 + probbase2 + probbase3) .* VV1base + (1 .- probbase1) .* VV1ceil1 + (1 .- probbase2) .* VV1ceil2 + (1 .- probbase3) .* VV1ceil3) / 3;
 end
+
+
+    # VV1base = xx[CartesianIndex.(state2base)];
+    # VV1ceil1 = xx[makeindex1.(state2base, state2ceil1)]; # makeindex1 much faster than anonymous functions
+    # VV1ceil2 = xx[makeindex2.(state2base, state2ceil2)];
+    # VV1ceil3 = xx[makeindex3.(state2base, state2ceil3)];
