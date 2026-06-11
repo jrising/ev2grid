@@ -11,10 +11,11 @@ soc_driving_1 = 0.5
 
 RR = 5 # number of possible regrange values
 probfail_penalty = 10.
+portion_below_penalty = 100.
 
 benefits_stoch, strat = run_optimized_stochastic_simulation(dt0, SS, drive_starts_time, park_starts_time)
-
 vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
+
 df1 = fullsimulate(dt0, strat, zeros(SS-1), vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
 df1[!, :Approach] .= "Optimized"
 
@@ -57,16 +58,14 @@ CSV.write("results/bytime-xstart.csv", vcat(alldf...))
 
 ## TODO: Create same plots for regrange benefits
 
-
 vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
 
-probstate = optimize_regrange_probstate_outer_loop(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time)
-strat, probfail, optregrange = optimize_regrange_probstate(dt0, probstate, drive_starts_time, park_starts_time);
-print(optregrange)
+strat, probfail, regrange = optimize_regrange_double_outer_loop(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time);
+print(regrange)
 
-df1 = fullsimulate(dt0, strat, optregrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)
+df1 = fullsimulate(dt0, strat, regrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)
 df1[!, :Approach] .= "Optimized"
-df1[!, :regrange_kw] = [0.; optregrange]  # Add regrange column
+df1[!, :regrange_kw] = regrange  # Add regrange column
 
 dsoc_func, regrange_func = thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time_charge_level)
 df2 = fullsimulate(dt0, dsoc_func, regrange_func, vehicles_plugged_1,  soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)

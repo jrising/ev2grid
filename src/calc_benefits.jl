@@ -50,6 +50,16 @@ function run_optimized_regrange_simulation(dt0, SS, drive_starts_time, park_star
     return benefits
 end
 
+function run_optimized_regrange2_simulation(dt0, SS, drive_starts_time, park_starts_time)
+    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
+
+    stratbest, regrangebest = optimize_regrange_given_outer_loop(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time)
+
+    df = fullsimulate(dt0, stratbest, regrangebest, vehicles_plugged_1, soc_plugged_1, 0., drive_starts_time, park_starts_time)
+    df[!, :optregrange] = regrangebest
+    benefits = sum(df[!, "valuep"]) + sum(df[!, "valuer"])
+    return benefits
+end
 
 function run_optimized_stochastic_simulation(dt0, SS, drive_starts_time, park_starts_time)
     vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
