@@ -23,7 +23,7 @@ df['datetime'] = pd.to_datetime(df['datetime'])
 # regrange_kw is in kW, convert to fraction change of total plugged capacity
 df['regrange_soc'] = np.where(
     df['vehicles_plugged'] > 0,
-    (REGNEUTRAL / 2) * df['regrange_kwh'] / (df['vehicles_plugged'] * VEHICLE_CAPACITY),
+    (REGNEUTRAL / 2) * df['regrange_kw'] / (df['vehicles_plugged'] * VEHICLE_CAPACITY),
     0
 )
 
