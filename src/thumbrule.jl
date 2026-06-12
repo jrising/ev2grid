@@ -61,11 +61,17 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
     ceiling = soc_max - fracpower_max
     floor = soc_min + fracpower_max
 
+    ## 3. If that’s a negative range, then just do ROT1 with a 0.625 target.
+    ## If it's a positive range, allow arbitrage within the range and regrange + frac_power_max up to 0.95 - frac_power_min to 0.3
+
+    # take the minimum of the charge capability and the amount of headroom available
+    regrange_value = min((soc_max - (soc_max + soc_min) / 2) / (regneutral / 2), fracpower_max, -fracpower_min) * vehicles_plugged_1 * vehicle_capacity
+
     regrange_func = (tt) -> begin
         dt1 = dt0 + periodstep(tt)
         current_time = Time(dt1)
-        if tt == 1 || timesteps_since_park(dt0, park_starts_time) <= 1 ||
-            timesteps_to_drive(dt0, park_starts_time) <= 1
+        if tt == 1 || timesteps_since_park(dt1, park_starts_time) < 1 ||
+            timesteps_to_drive(dt1, drive_starts_time) <= 1
             return 0.0 ## can't offer regrange at the start in case we are at the edge
         end
 
@@ -86,10 +92,6 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
         end
     end
 
-    ## 3. If that’s a negative range, then just do ROT1 with a 0.625 target.
-    ## If it's a positive range, allow arbitrage within the range and regrange + frac_power_max up to 0.95 - frac_power_min to 0.3
-
-    regrange_value = min((soc_max - soc_min) / 2, fracpower_max, -fracpower_min) * regneutral * vehicles_plugged_1 * vehicle_capacity
 
     ## consider the cases where as we are charging up to drive_time_charge_level and just after parking we might be down near the edge, so
     ## the regrange box shrinks

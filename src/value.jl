@@ -11,6 +11,10 @@ pricedf = CSV.read(joinpath(@__DIR__, "../data/predprice.csv"), DataFrame)
 pricedf[!, :datetime] = DateTime.(replace.(pricedf.datetime, " " => "T"))
 pricedf.predpe = pricedf.predpe / 1000 # $/MWh -> $/kWh
 
+let _avg = CSV.read(joinpath(@__DIR__, "../data/avg_regprice_byhour.csv"), DataFrame)
+    global avg_regprice_byhour = Dict(zip(_avg.hour, _avg.avg_predpe ./ 1000)) # $/MWh -> $/kWh
+end
+
 """
 Calculates the value of having energy at a certain level. The function considers the proportion of energy below
 a threshold (`portion_below`), the available fraction of energy (`soc_avail`), and the needed fraction of
