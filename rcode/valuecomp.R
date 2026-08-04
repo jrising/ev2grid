@@ -12,6 +12,15 @@ dir.create("plots_R_regrange", showWarnings = FALSE, recursive = TRUE)
 
 df <- read.csv("results/bytime_regrange.csv")
 
+## Total value of each component over the whole simulated horizon, by approach
+totals <- df %>% group_by(Approach) %>%
+    summarize(`Power costs`=sum(valuep), `State penalty`=sum(valuepns),
+              `Energy level`=sum(valuee), `Regulation payment`=sum(valuer),
+              Total=sum(valuep + valuepns + valuee + valuer))
+
+cat("\nTotal value by approach, ", min(df$datetime), " to ", max(df$datetime), ":\n", sep="")
+print(as.data.frame(totals), row.names=FALSE, digits=4)
+
 df2 <- df %>% filter(as.Date(datetime) == "2023-07-17") %>%
     pivot_longer(cols=c('valuep', 'valuepns', 'valuee', 'valuer'))
 df2$label <- unlist(list('valuep'="Power costs", 'valuee'="Energy level",
