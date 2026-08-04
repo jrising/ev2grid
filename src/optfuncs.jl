@@ -388,9 +388,11 @@ function optimize_regrange_given(dt0::DateTime, regrange::Vector{Float64},  driv
 end
 
 function given_calcvalue(df, regrange, dt0)
-    df[!, :kw] = (df.dsoc .* vehicle_capacity .* df.vehicles_plugged .* (1 .- df.portion_below) / timestep) .+
-        (max_charging_kw * df.portion_below .* df.vehicles_plugged) .+ regrange
-    sum(df.valuep .+ df.valuepns .+ df.valuee .+ df.valuer .- portion_below_penalty * sqrt.(df.portion_below)) -
+    ## Use the post-action split: it determines which vehicles adjust_below force-charges, so
+    ## it is what the demand charge and the below-threshold penalty must be assessed against.
+    df[!, :kw] = (df.dsoc .* vehicle_capacity .* df.vehicles_plugged .* (1 .- df.portion_below_2) / timestep) .+
+        (max_charging_kw * df.portion_below_2 .* df.vehicles_plugged) .+ regrange
+    sum(df.valuep .+ df.valuepns .+ df.valuee .+ df.valuer .- portion_below_penalty * sqrt.(df.portion_below_2)) -
         get_demand_cost(dt0, collect(skipmissing(df.kw)), timestep)
 end
 
