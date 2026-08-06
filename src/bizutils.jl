@@ -99,7 +99,7 @@ function adjust_below(tup::Tuple{Float64, Float64, Float64}, soc_below::Float64,
     @assert vehicles_plugged ≤ vehicles + 1e-8
 
     if vehicles_plugged > 0
-        soc_plugged = ((soc_below + min(soc_needed, timestep * fracpower_max)) * vehicles_below + tup[2] * tup[1]) / vehicles_plugged
+        soc_plugged = (min(soc_needed, soc_below + timestep * fracpower_max) * vehicles_below + tup[2] * tup[1]) / vehicles_plugged
     else
         soc_plugged = tup[2]
     end
