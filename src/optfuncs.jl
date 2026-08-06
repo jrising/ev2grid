@@ -65,7 +65,7 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
             # Note: We impose costs from soc-below vehicles, but do not adjust state because it pushes up plugged-in soc every period
             statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]),
                                                vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][3], soc_range[ff2]),
-                                      vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+                                      vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1], soc_needed) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
             state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2);
 
@@ -179,7 +179,7 @@ function optimize_regrange_probstate(dt0::DateTime, probstate::Array{Float64, 4}
                 # Note: We impose costs from soc-below vehicles, but do not adjust state because it pushes up plugged-in soc every period
                 statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]),
                                                    vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][3], soc_range[ff2]),
-                                          vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+                                          vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1], soc_needed) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
                 state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2);
                 VV1byactthismc = combinebyact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
@@ -358,7 +358,7 @@ function optimize_regrange_given(dt0::DateTime, regrange::Vector{Float64},  driv
             # Note: We impose costs from soc-below vehicles, but do not adjust state because it pushes up plugged-in soc every period
             statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]),
                                                vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][3], soc_range[ff2]),
-                                      vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+                                      vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1], soc_needed) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
             state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2);
             VV1byactthismc = combinebyact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);

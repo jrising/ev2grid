@@ -71,7 +71,7 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
 
         soc_needed = soc_scheduled(dt1, drive_starts_time)
         vehicle_split = split_below(soc_plugged_2, soc_needed)
-        vehicles_plugged_2, soc_plugged_2, soc_driving_2 = adjust_below(simustep(vehicles_plugged_1, vehicles_plugged_1 * (1. - vehicle_split[1]), soc_plugged_2, soc_driving_1), vehicle_split[2], vehicles_plugged_1 * vehicle_split[1])
+        vehicles_plugged_2, soc_plugged_2, soc_driving_2 = adjust_below(simustep(vehicles_plugged_1, vehicles_plugged_1 * (1. - vehicle_split[1]), soc_plugged_2, soc_driving_1), vehicle_split[2], vehicles_plugged_1 * vehicle_split[1], soc_needed)
         vehicles_plugged_1, soc_plugged_1, soc_driving_1 = vehicles_plugged_2, soc_plugged_2, soc_driving_2
         vehicle_split = split_below(soc_plugged_2, soc_needed)
     end
