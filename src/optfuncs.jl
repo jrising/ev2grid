@@ -411,10 +411,14 @@ function given_initial(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, dr
     # Don't allow in period that vehicles leave, because they aren't there by end of period
     given_calcmaxrange!(df)
 
-    strat = ones(Int, SS-1, EE, FF, FF) # default do-nothing strat
+    # default do-nothing strat
+    if PP == FF
+        strat = ones(Int, SS-1, EE, FF, FF) * round(Int64, PP / 2)
+    else
+        strat = ones(Int, SS-1, EE, FF, FF)
+    end
 
     return strat, df.regrange_maxkw
-
 end
 
 function optimize_regrange_given_outer_loop(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time)
