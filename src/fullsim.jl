@@ -33,9 +33,8 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
         valuepns = value_power_newstate(price, vehicle_split[1], soc_needed - vehicle_split[2], vehicles_plugged_1)
         valuee = value_energy(vehicle_split[1], vehicle_split[3], soc_needed, vehicles_plugged_1)
 
-        pricedfrow = pricedf[pricedf.datetime .== dt1, :] # only works if timestep is whole hours
-        regprice = pricedfrow.predpe[1]
-        valuer = regprice * get_regrange(tt) * timestep
+        regprice = avg_regprice_byhour[hour(dt1)]
+        valuer = regprice * get_regrange(tt) / regneutral
 
         push!(rows, (dt0 + periodstep(tt), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, dsoc, statebase, valuep, valuepns, valuee, valuer))
 

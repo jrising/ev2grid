@@ -150,8 +150,7 @@ function optimize_regrange_probstate(dt0::DateTime, probstate::Array{Float64, 4}
         valuepns_byaction = [valuepns[ee, ff12_byaction[pp, ee, ff1, ff2]] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
         valuee_byaction = [valuee[ee, ff12_byaction[pp, ee, ff1, ff2]] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
-        pricedfrow = pricedf[pricedf.datetime .== dt1, :] # only works if timestep is whole hours
-        regprice = pricedfrow.predpe[1] # XXX: Later use uncertainty
+        regprice = avg_regprice_byhour[hour(dt1)]
 
         bestregrange = -1.
         beststrat = zeros(Int64, EE, FF, FF);
@@ -336,8 +335,7 @@ function optimize_regrange_given(dt0::DateTime, regrange::Vector{Float64},  driv
         valuee_byaction = [valuee[ee, ff12_byaction[pp, ee, ff1, ff2]] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
         portion_below_byaction = [vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
-        pricedfrow = pricedf[pricedf.datetime .== dt1, :] # only works if timestep is whole hours
-        regprice = pricedfrow.predpe[1] # XXX: Later use uncertainty
+        regprice = avg_regprice_byhour[hour(dt1)]
 
         regrange_maxenergychange = regrange[tt] * (regneutral / 2)
         regrange_good = (energy_bystate .- regrange_maxenergychange .>= energy_minallow) .& (energy_bystate .+ regrange_maxenergychange .<= energy_maxallow)
