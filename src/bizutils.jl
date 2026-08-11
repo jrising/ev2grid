@@ -94,12 +94,12 @@ Adjusts the fraction of vehicles and energy plugged based on the vehicles and en
   2. Adjusted state-of-charge for plugged-in vehicles.
   3. Original state-of-charge for driving vehicles.
 """
-function adjust_below(tup::Tuple{Float64, Float64, Float64}, soc_below::Float64, vehicles_below::Float64)
+function adjust_below(tup::Tuple{Float64, Float64, Float64}, soc_below::Float64, vehicles_below::Float64, soc_needed::Float64)
     vehicles_plugged = tup[1] + vehicles_below
     @assert vehicles_plugged ≤ vehicles + 1e-8
 
     if vehicles_plugged > 0
-        soc_plugged = ((soc_below + timestep * fracpower_max) * vehicles_below + tup[2] * tup[1]) / vehicles_plugged
+        soc_plugged = (min(soc_needed, soc_below + timestep * fracpower_max) * vehicles_below + tup[2] * tup[1]) / vehicles_plugged
     else
         soc_plugged = tup[2]
     end

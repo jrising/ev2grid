@@ -65,7 +65,7 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
             # Note: We impose costs from soc-below vehicles, but do not adjust state because it pushes up plugged-in soc every period
             statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]),
                                                vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][3], soc_range[ff2]),
-                                      vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+                                      vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1], soc_needed) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
             state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2);
 
@@ -178,7 +178,7 @@ function optimize_regrange_probstate(dt0::DateTime, probstate::Array{Float64, 4}
                 # Note: We impose costs from soc-below vehicles, but do not adjust state because it pushes up plugged-in soc every period
                 statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]),
                                                    vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][3], soc_range[ff2]),
-                                          vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+                                          vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1], soc_needed) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
                 state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2);
                 VV1byactthismc = combinebyact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
@@ -356,7 +356,7 @@ function optimize_regrange_given(dt0::DateTime, regrange::Vector{Float64},  driv
             # Note: We impose costs from soc-below vehicles, but do not adjust state because it pushes up plugged-in soc every period
             statevar2 = [adjust_below(simustep(vehicles_plugged_range[ee], vehicles_plugged_range[ee] * (1. - vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]),
                                                vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][3], soc_range[ff2]),
-                                      vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+                                      vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1], soc_needed) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
             state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2);
             VV1byactthismc = combinebyact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
@@ -411,10 +411,14 @@ function given_initial(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, dr
     # Don't allow in period that vehicles leave, because they aren't there by end of period
     given_calcmaxrange!(df)
 
-    strat = ones(Int, SS-1, EE, FF, FF) # default do-nothing strat
+    # default do-nothing strat
+    if PP == FF
+        strat = ones(Int, SS-1, EE, FF, FF) * round(Int64, PP / 2)
+    else
+        strat = ones(Int, SS-1, EE, FF, FF)
+    end
 
     return strat, df.regrange_maxkw
-
 end
 
 function optimize_regrange_given_outer_loop(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time)

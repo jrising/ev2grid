@@ -30,7 +30,8 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
         price = get_retail_price(dt1)
 
         valuep = value_power_action(price, dsoc, vehicle_split[1], vehicles_plugged_1)
-        valuepns = value_power_newstate(price, vehicle_split[1], soc_needed - vehicle_split[2], vehicles_plugged_1)
+        vehicle_split_next = split_below(soc_plugged_1 + dsoc, soc_needed);
+        valuepns = value_power_newstate(price, vehicle_split_next[1], soc_needed - vehicle_split_next[2], vehicles_plugged_1)
         valuee = value_energy(vehicle_split[1], vehicle_split[3], soc_needed, vehicles_plugged_1)
 
         regprice = avg_regprice_byhour[hour(dt1)]
@@ -70,7 +71,7 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
 
         soc_needed = soc_scheduled(dt1, drive_starts_time)
         vehicle_split = split_below(soc_plugged_2, soc_needed)
-        vehicles_plugged_2, soc_plugged_2, soc_driving_2 = adjust_below(simustep(vehicles_plugged_1, vehicles_plugged_1 * (1. - vehicle_split[1]), soc_plugged_2, soc_driving_1), vehicle_split[2], vehicles_plugged_1 * vehicle_split[1])
+        vehicles_plugged_2, soc_plugged_2, soc_driving_2 = adjust_below(simustep(vehicles_plugged_1, vehicles_plugged_1 * (1. - vehicle_split[1]), soc_plugged_2, soc_driving_1), vehicle_split[2], vehicles_plugged_1 * vehicle_split[1], soc_needed)
         vehicles_plugged_1, soc_plugged_1, soc_driving_1 = vehicles_plugged_2, soc_plugged_2, soc_driving_2
         vehicle_split = split_below(soc_plugged_2, soc_needed)
     end
