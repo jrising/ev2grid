@@ -51,6 +51,7 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
         ff12_byaction = discrete_roundbelow.(soc1_byaction, soc_min, soc_max, FF);
         valuepns_byaction = [valuepns[ee, ff12_byaction[pp, ee, ff1, ff2]] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
         valuee_byaction = [valuee[ee, ff12_byaction[pp, ee, ff1, ff2]] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
+        portion_below_byaction = [vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1] for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
         VV1byactsummc = zeros(Float64, PP, EE, FF, FF);
 
@@ -76,7 +77,9 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
         VV1byact = VV1byactsummc / mcdraws + valuep + valuepns_byaction + valuee_byaction;
         VV1byact[isnan.(VV1byact)] .= -Inf
 
-        bestact = dropdims(argmax(VV1byact, dims=1), dims=1);
+        # bestact = dropdims(argmax(VV1byact, dims=1), dims=1);
+        bestact = dropdims(argmax(VV1byact - portion_below_penalty * sqrt.(portion_below_byaction), dims=1), dims=1);
+        
         strat[tt, :, :, :] .= Base.Fix2(getindex, 1).(bestact);
         if any(strat[tt, :, :, :] .== 0)
             break
