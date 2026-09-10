@@ -70,7 +70,7 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
     regrange_func = (tt) -> begin
         dt1 = dt0 + periodstep(tt)
         current_time = Time(dt1)
-        if tt == 1 || timesteps_since_park(dt1, park_starts_time) < 1 ||
+        if timesteps_since_park(dt1, park_starts_time) < 1 ||
             timesteps_to_drive(dt1, drive_starts_time) <= 1
             return 0.0 ## can't offer regrange at the start in case we are at the edge
         end
