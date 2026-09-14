@@ -378,7 +378,7 @@ function optimize_regrange_given(dt0::DateTime, regrange::Vector{Float64},  driv
         VV1byact = VV1byactsummc / mcdraws + valuep + valuepns_byaction + valuee_byaction + regprice * regrange[tt] * (1 .- probfailbyact);
         VV1byact[isnan.(VV1byact)] .= -Inf;
 
-        bestact = dropdims(argmax(VV1byact - probfail_penalty * sqrt.(probfailbyact) - portion_below_penalty * sqrt.(portion_below_byaction), dims=1), dims=1);
+        bestact = dropdims(argmax(VV1byact - probfail_penalty * sqrt.(probfailbyact), dims=1), dims=1);
 
         strat[tt, :, :, :] .= Base.Fix2(getindex, 1).(bestact);
         VV2 = VV1byact[bestact];
@@ -391,7 +391,7 @@ end
 function given_calcvalue(df, regrange, dt0)
     df[!, :kw] = (df.dsoc .* vehicle_capacity .* df.vehicles_plugged .* (1 .- df.portion_below) / timestep) .+
         (max_charging_kw * df.portion_below .* df.vehicles_plugged) .+ regrange
-    sum(df.valuep .+ df.valuepns .+ df.valuee .+ df.valuer .- portion_below_penalty * sqrt.(df.portion_below)) -
+    sum(df.valuep .+ df.valuepns .+ df.valuee .+ df.valuer) -
         get_demand_cost(dt0, collect(skipmissing(df.kw)), timestep)
 end
 
