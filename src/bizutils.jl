@@ -22,10 +22,10 @@ function make_actions(soc0::Float64, soc_preferred::Vector{Float64})
         soc_diff = soc_preferred .- soc0
 
         if any(soc_diff .> fracpower_max * timestep)
-            soc_diff[soc_diff .> fracpower_max * timestep] .= fracpower_max * timestep
+            soc_diff[soc_diff .> fracpower_max * timestep] .= maximum(soc_diff[soc_diff .<= fracpower_max * timestep])
         end
         if any(soc_diff .< fracpower_min * timestep)
-            soc_diff[soc_diff .< fracpower_min * timestep] .= fracpower_min * timestep
+            soc_diff[soc_diff .< fracpower_min * timestep] .= minimum(soc_diff[soc_diff .>= fracpower_min * timestep])
         end
         return soc_diff
     else
