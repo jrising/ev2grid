@@ -75,5 +75,5 @@ Note: Ensure `vehicle_capacity`, `vehicles`, and `efficiency` are defined in the
 """
 function value_power_newstate(price::Float64, portion_below::Float64, soc_toadd_below::Float64, vehicles_plugged::Float64)
     denergy_below = soc_toadd_below * vehicle_capacity * vehicles_plugged * portion_below
-    return -price * denergy_below / efficiency
+    return -price * denergy_below / efficiency * portion_below_penalty
 end

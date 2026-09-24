@@ -95,9 +95,14 @@ function fullsimulate(dt0::DateTime, strat::AbstractArray{Int}, regrange::Vector
         ppceil1 = strat[tt, makeindex1(statebase, stateceil1)]
         ppceil2 = strat[tt, makeindex2(statebase, stateceil2)]
         ppceil3 = strat[tt, makeindex3(statebase, stateceil3)]
-        dsoc_pp = ((probbase1 + probbase2 + probbase3) .* dsoc_base[ppbase] + (1 .- probbase1) .* dsoc_ceil[ppceil1] + (1 .- probbase2) .* dsoc_ceil[ppceil2] + (1 .- probbase3) .* dsoc_ceil[ppceil3]) / 3;
+        target_pp = ((probbase1 + probbase2 + probbase3) .* (soc_range[statebase[2]] + dsoc_base[ppbase]) +
+                     (1 .- probbase1) .* (soc_range[stateceil2] + dsoc_ceil[ppceil1]) +
+                     (1 .- probbase2) .* (soc_range[stateceil2] + dsoc_ceil[ppceil2]) +
+                     (1 .- probbase3) .* (soc_range[stateceil2] + dsoc_ceil[ppceil3])) / 3;
 
-        dsoc_pp
+        dsoc = target_pp - state[2]
+
+        dsoc
     end
     fullsimulate(dt0, get_dsoc, tt -> regrange[tt], vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time, stochastic)
 end
