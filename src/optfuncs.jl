@@ -77,7 +77,7 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
         VV1byact[isnan.(VV1byact)] .= -Inf
 
         bestact = dropdims(argmax(VV1byact, dims=1), dims=1);
-        
+
         strat[tt, :, :, :] .= Base.Fix2(getindex, 1).(bestact);
         if any(strat[tt, :, :, :] .== 0)
             break
@@ -140,7 +140,7 @@ function optimize_regrange_probstate(dt0::DateTime, probstate::Array{Float64, 4}
 
         dt1 = dt0 + periodstep(tt)
         price = get_retail_price(dt1)
-        valuep = [value_power_action(price, dsoc[pp, ee, ff1, ff2], vehicle_split[ff1][1], vehicles_plugged_range[ee]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF]
+        valuep = [value_power_action(price, dsoc[pp, ee, ff1, ff2], vehicle_split[ff1][1], vehicles_plugged_range[ee]) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
         soc_needed = soc_scheduled(dt1, drive_starts_time)
         vehicle_split = split_below.(soc_range, soc_needed)
@@ -221,6 +221,10 @@ function optimize_regrange_probstate(dt0::DateTime, probstate::Array{Float64, 4}
         probfail = bestprobfail
     end
 
+    if all(optregrange .== 0.)
+        warn("All regrange values are 0 under probstate.")
+    end
+
     return strat, probfail, optregrange
 end
 
@@ -238,7 +242,7 @@ function probstate_initial(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1
     probstate / 2 .+ repeat(ones(1, EE, FF, FF) / (EE * FF * FF), SS-1) / 2;
 end
 
-function probstate_estimate(strat, regrange)
+function probstate_estimate(dt0, strat, regrange, vehicles_plugged_1, soc_plugged_1, drive_starts_time, park_starts_time)
     dfall = nothing
     for ii in 1:mcdraws
         local df = fullsimulate(dt0, strat, regrange, vehicles_plugged_1, soc_plugged_1, 0., drive_starts_time, park_starts_time)
@@ -255,7 +259,7 @@ function probstate_estimate(strat, regrange)
 
     probstate = zeros(SS-1, EE, FF, FF);
     for tt in 1:SS-1
-        dt1 = dt0 + periodstep(tt - 1)
+        dt1 = dt0 + periodstep(tt)
 
         for state in unique(dfall.state[dfall.datetime .== dt1])
             probstate[tt, state...] = sum(map(rowstate -> rowstate == state, dfall.state[dfall.datetime .== dt1])) / sum(dfall.datetime .== dt1)
@@ -274,7 +278,7 @@ function optimize_regrange_probstate_outer_loop(dt0, soc_plugged_1, soc_driving_
         println("Loop $(ll)")
         strat, probfail, optregrange = optimize_regrange_probstate(dt0, probstate, drive_starts_time, park_starts_time);
 
-        global probstate = probstate_estimate(strat, optregrange)
+        global probstate = probstate_estimate(dt0, strat, optregrange, vehicles_plugged_1, soc_plugged_1, drive_starts_time, park_starts_time)
     end
     return probstate
 end
@@ -391,6 +395,7 @@ end
 function given_calcvalue(df, regrange, dt0)
     df[!, :kw] = (df.dsoc .* vehicle_capacity .* df.vehicles_plugged .* (1 .- df.portion_below) / timestep) .+
         (max_charging_kw * df.portion_below .* df.vehicles_plugged) .+ regrange
+
     sum(df.valuep .+ df.valuepns .+ df.valuee .+ df.valuer) -
         get_demand_cost(dt0, collect(skipmissing(df.kw)), timestep)
 end
@@ -404,6 +409,10 @@ function given_calcmaxrange!(df)
     df[!, :energy_regrange_avail] = min.(df.energy_maxallow .- df.energy_soc, df.energy_soc .- df.energy_minallow)
     df[!, :regrange_maxkw] = min.(max_charging_kw .* df.vehicles_plugged .* (1 .- df.portion_below),
                                   df.energy_regrange_avail / (regneutral / 2)) .* (1. .- disallows)
+    if all(df.regrange_maxkw .== 0.)
+        warn("All regrange values are 0 under given.")
+    end
+    df
 end
 
 function given_initial(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time)
@@ -433,9 +442,9 @@ function optimize_regrange_given_outer_loop(dt0, soc_plugged_1, soc_driving_1, v
     regrangebest = regrange
     stratbest = ones(Int, SS-1, EE, FF, FF);
     lastimprove = 0
+    Random.seed!(20240826);
     for ll in 1:10000
         println("Loop $(ll)")
-        Random.seed!(20240826);
         strat, probfail = optimize_regrange_given(dt0, regrange, drive_starts_time, park_starts_time);
 
         local df = fullsimulate(dt0, strat, regrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time, mcdraws > 1);
@@ -449,7 +458,6 @@ function optimize_regrange_given_outer_loop(dt0, soc_plugged_1, soc_driving_1, v
             lastimprove = ll
 
             given_calcmaxrange!(df)
-
             dfbest = df
         elseif ll >= 100 && (ll - lastimprove > 10)
             break
@@ -463,43 +471,74 @@ function optimize_regrange_given_outer_loop(dt0, soc_plugged_1, soc_driving_1, v
 end
 
 function optimize_regrange_double_outer_loop(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time)
-    strat, regrange = given_initial(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time)
+    strat, regrange = given_initial(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time);
     df = fullsimulate(dt0, strat, regrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)
     given_calcmaxrange!(df)
 
-    valuebest = given_calcvalue(df, regrange, dt0)
+    valuebest = given_calcvalue(df, regrange, dt0);
+    maxvalue = valuebest # need this, because optimize_regrange_probstate can keep producing low values to be uselessly improved
     dfbest = df
     regrangebest = regrange
     stratbest = strat
     probfailbest = nothing
+    lastprobstate = 0.
+    doprobstate = true
     lastimprove = 0
+    Random.seed!(20240826);
     for ll in 1:10000
         println("Loop $(ll)")
-        Random.seed!(20240826);
 
-        if ll % 2 == 0
-            probstate = probstate_estimate(strat, regrangebest)
-            strat, probfail, regrange = optimize_regrange_probstate(dt0, probstate, drive_starts_time, park_starts_time);
-            regrange = [0; regrange] # Need initial value
+        if doprobstate && (ll % 2 == 1)
+            ## Always updates best
+            probstate = probstate_estimate(dt0, strat, regrangebest, vehicles_plugged_1, soc_plugged_1, drive_starts_time, park_starts_time);
+            stratbest, probfailbest, regrange = optimize_regrange_probstate(dt0, probstate, drive_starts_time, park_starts_time);
+            regrange = [regrange; 0.] # Need final value
+
+            if all(lastprobstate .== probstate)
+                doprobstate = false
+            else
+                println(sum(abs.(lastprobstate .- probstate)))
+            end
+
+            # dfbest = fullsimulate(dt0, stratbest, regrangebest, vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time, mcdraws > 1);
+            # given_calcmaxrange!(dfbest)
+            # valuebest = given_calcvalue(dfbest, regrangebest, dt0)
+            # lastprobstate = probstate
         else
-            regrange = rand.(Truncated.(Normal.(min.(dfbest.regrange_maxkw, regrangebest), exp(-ll / 100)),
-                                        0., dfbest.regrange_maxkw))
-            strat, probfail = optimize_regrange_given(dt0, regrange, drive_starts_time, park_starts_time);
+            ## Only updates on higher value
+            regrange = copy(regrangebest)
+            index = mod1(div(ll, 2), length(regrange))
+            if rand() < 0.5 && dfbest.regrange_maxkw[index] > 0.
+                regrange[index] =
+                    rand(Truncated(Normal(min(dfbest.regrange_maxkw[index], regrangebest[index]), exp(-ll / 100)),
+                                   0., dfbest.regrange_maxkw[index]))
+            else
+                regrange = rand.(Truncated.(Normal.(min.(dfbest.regrange_maxkw, regrangebest), exp(-ll / 100)),
+                                            min.(dfbest.regrange_maxkw, regrangebest), dfbest.regrange_maxkw))
+            end
         end
+        println(regrange)
+
+        strat, probfail = optimize_regrange_given(dt0, regrange, drive_starts_time, park_starts_time);
 
         local df = fullsimulate(dt0, strat, regrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time, mcdraws > 1);
         value = given_calcvalue(df, regrange, dt0)
 
+        println("$(value) vs. $(valuebest)")
         if value > valuebest
             println("Improved under $(ll)")
             valuebest = value
             regrangebest = regrange
             stratbest = strat
             probfailbest = probfail
-            lastimprove = ll
+            if value > maxvalue
+                lastimprove = ll
+                maxvalue = value
+            end
 
             given_calcmaxrange!(df)
             dfbest = df
+            doprobstate = true
         elseif ll >= 100 && (ll - lastimprove > 10)
             break
         end

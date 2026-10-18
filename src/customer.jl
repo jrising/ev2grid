@@ -54,7 +54,7 @@ function soc_scheduled(dt::DateTime, drive_starts_time::Time)
     date_part = Dates.Date(dt)
     dt_9am = DateTime(date_part, drive_starts_time)
 
-    if dt_9am - periodstep(1) ≤ dt < dt_9am
+    if dt_9am - periodstep(1) ≤ dt ≤ dt_9am
         return soc_9am
     else
         return soc_min
