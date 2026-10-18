@@ -95,5 +95,5 @@ function get_demand_cost(dt0::DateTime, kwbytimestep::Vector{Float64}, timestep:
         end
     end
 
-    18.73 * max(round(max60_peak), round(max60_nonpeak / 3))
+    18.73 * max(round(max60_peak), round(max60_nonpeak / 3)) / 30 # / 30 so doesn't over-penalize 1-day runs
 end
