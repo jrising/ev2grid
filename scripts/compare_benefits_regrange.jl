@@ -25,7 +25,7 @@ df2[!, :Approach] .= "Rule of Thumb"
 df3 = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule_baseline(tt, state, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
 df3[!, :Approach] .= "Baseline"
 
-CSV.write("results/bytime.csv", [df1; df2; df3])
+CSV.write("../results/bytime.csv", [df1; df2; df3])
 
 alldf = []
 for drive_starts_hour in 1:23
@@ -53,7 +53,7 @@ for drive_starts_hour in 1:23
     push!(alldf, df3)
 end
 
-CSV.write("results/bytime-xstart.csv", vcat(alldf...))
+CSV.write("../results/bytime-xstart.csv", vcat(alldf...))
 
 
 # ## TODO: Create same plots for regrange benefits
@@ -78,6 +78,8 @@ df3[!, :regrange_kw] = zeros(SS)  # Baseline offers no regulation
 
 CSV.write("results/bytime_regrange.csv", [df1; df2; df3])
 
+mcdraws = 1
+
 alldf = []
 for drive_starts_hour in 1:23
     println(drive_starts_hour)
@@ -86,13 +88,12 @@ for drive_starts_hour in 1:23
 
     vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
 
-    probstate = optimize_regrange_probstate_outer_loop(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time)
-    strat, probfail, optregrange = optimize_regrange_probstate(dt0, probstate, drive_starts_time, park_starts_time);
+    strat, probfail, optregrange = optimize_regrange_double_outer_loop(dt0, soc_plugged_1, soc_driving_1, vehicles_plugged_1, drive_starts_time, park_starts_time);
 
     df1 = fullsimulate(dt0, strat, optregrange, vehicles_plugged_1, soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)
     df1[!, :Approach] .= "Optimized"
     df1[!, :start_hour] .= drive_starts_hour
-    df1[!, :regrange_kw] = [0.; optregrange]  # Add regrange column
+    df1[!, :regrange_kw] = optregrange  # Add regrange column
 
     dsoc_func, regrange_func = thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time_charge_level)
     df2 = fullsimulate(dt0, dsoc_func, regrange_func, vehicles_plugged_1,  soc_plugged_1, soc_driving_1, drive_starts_time, park_starts_time)
@@ -110,5 +111,5 @@ for drive_starts_hour in 1:23
     push!(alldf, df3)
 end
 
-CSV.write("results/bytime-xstart_regrange.csv", vcat(alldf...))
+CSV.write("../results/bytime-xstart_regrange.csv", vcat(alldf...))
 
