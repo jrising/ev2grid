@@ -69,7 +69,7 @@ function optimize(dt0::DateTime, SS::Int, drive_starts_time::Time, park_starts_t
 
             state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2);
 
-            VV1byactthismc = combinebyact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3)
+            VV1byactthismc = combinebyact(VV2 * (tt > 24 ? 1 - (tt - 24.) / 24. : 1), state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3)
             VV1byactsummc += VV1byactthismc;
         end
 
@@ -182,7 +182,7 @@ function optimize_regrange_probstate(dt0::DateTime, probstate::Array{Float64, 4}
                                           vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1], soc_needed) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
                 state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2);
-                VV1byactthismc = combinebyact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
+                VV1byactthismc = combinebyact(VV2 * (tt > 24 ? 1 - (tt - 24.) / 24. : 1), state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
                 VV1byactsummc += VV1byactthismc;
 
                 if regrange > 0
@@ -364,7 +364,7 @@ function optimize_regrange_given(dt0::DateTime, regrange::Vector{Float64},  driv
                                       vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][2], vehicles_plugged_range[ee] * vehicle_split[ff12_byaction[pp, ee, ff1, ff2]][1], soc_needed) for pp=1:PP, ee=1:EE, ff1=1:FF, ff2=1:FF];
 
             state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3 = breakstate(statevar2);
-            VV1byactthismc = combinebyact(VV2, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
+            VV1byactthismc = combinebyact(VV2 * (tt > 24 ? 1 - (tt - 24.) / 24. : 1), state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
             VV1byactsummc += VV1byactthismc;
 
             if regrange[tt] > 1 # can have very small values that result in failures

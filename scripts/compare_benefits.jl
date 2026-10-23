@@ -5,6 +5,7 @@ global mcdraws = 1
 dt0 = DateTime("2023-07-17T00:00:00")
 drive_starts_time = Time(9, 0, 0)  # Example drive start time
 park_starts_time = Time(17, 0, 0)  # Example park start time
+portion_below_penalty = 100
 
 soc_plugged_1 = 0.5
 soc_driving_1 = 0.5
