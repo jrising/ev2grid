@@ -13,7 +13,7 @@ function get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive
     price_switch = false  # Default: No switch found
     current_peak_status = is_peak(dt1)
 
-    for t in 1:timesteps_available
+    for t in 1:(timesteps_available-1) # Remove the time when driving starts, since we can't charge then
         dt_check = dt1 + periodstep(t)
         if is_peak(dt_check) != current_peak_status  # Detects a switch
             price_switch = true
@@ -24,9 +24,10 @@ function get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive
     soc_goal = drive_time_charge_level ## if nothing else set to 80%
 
     if is_peak(dt1) && floor <= soc_plugged_1 && price_switch
-        soc_goal = floor # Discharge if peak price, above floor, and price change coming
-    elseif !is_peak(dt1)
-        soc_goal = ceiling # Charge if off peak
+        # add headroom for soc_dispersion equal to 3 standard deviations 
+        soc_goal = floor + 3 * soc_dispersion # Discharge if peak price, above floor, and price change coming
+    elseif !is_peak(dt1) && price_switch ## if off peak and price change coming, charge to ceiling
+        soc_goal = ceiling # otherwise charge to drive time level if no price change coming
     elseif floor > soc_plugged_1
         soc_goal = drive_time_charge_level # Charge if below floor
     end
@@ -52,8 +53,6 @@ function safe_charging(dt, soc_current, drive_starts_time, soc_goal, soc_floor, 
 end
 
 function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time_charge_level)
-    vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_starts_time, park_starts_time)
-
     # ## allow energy arbitrage so long as there is space in the middle of your charging rate band to fluctuate as opposed to being fixed at 0.625 when at level 3 charging.
     # ## 1. Calculate how much we can charge in 1 period.
     # fracpower_max
@@ -67,9 +66,14 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
     # take the minimum of the charge capability and the amount of headroom available
     regrange_value = min((soc_max - (soc_max + soc_min) / 2) / (regneutral / 2), fracpower_max, -fracpower_min) * vehicles_plugged_1 * vehicle_capacity
 
+    # dsoc chosen in each timestep; the charger power it uses is not available for regulation
+    dsoc_bytt = Dict{Int, Float64}()
+
     regrange_func = (tt) -> begin
         dt1 = dt0 + periodstep(tt)
         current_time = Time(dt1)
+        charging_kw = abs(get(dsoc_bytt, tt, 0.)) * vehicle_capacity * vehicles_plugged_1 / timestep
+        regrange_left = min(regrange_value, max_charging_kw * vehicles_plugged_1 - charging_kw)
         if timesteps_since_park(dt1, park_starts_time) < 1 ||
             timesteps_to_drive(dt1, drive_starts_time) <= 1
             return 0.0 ## can't offer regrange at the start in case we are at the edge
@@ -80,14 +84,14 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
             if current_time >= drive_starts_time && current_time <= park_starts_time
                 return 0.0  # During drive hours
             else
-                return regrange_value  # Outside drive hours
+                return regrange_left  # Outside drive hours
             end
         else
             # Midnight crossing case
             if current_time >= drive_starts_time || current_time <= park_starts_time
                 return 0.0  # During drive hours
             else
-                return regrange_value  # Outside drive hours
+                return regrange_left  # Outside drive hours
             end
         end
     end
@@ -101,11 +105,11 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
         soc_goal = (soc_max + soc_min) / 2
         (tt, state) -> begin
             dt1 = dt0 + periodstep(tt)
-            safe_charging(dt1, state[2], drive_starts_time, soc_goal, soc_min, drive_time_charge_level)
+            dsoc_bytt[tt] = safe_charging(dt1, state[2], drive_starts_time, soc_goal, soc_min, drive_time_charge_level)
     end, regrange_func
     else
         ## include arbitrage between ceiling and floor
-        (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive_time_charge_level), regrange_func
+        (tt, state) -> (dsoc_bytt[tt] = get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive_time_charge_level)), regrange_func
     end
     ## 4. Offer as regrange min(0.95 - SOC, SOC - 0.3).
 end
@@ -132,5 +136,5 @@ end
 
 function safe_soc_floor(dt, drive_starts_time, soc_floor, drive_time_charge_level)
     timesteps_available = timesteps_to_drive(dt, drive_starts_time)
-    return max(soc_floor, drive_time_charge_level - fracpower_max * (timesteps_available - 1))
+    return max(soc_floor, drive_time_charge_level - fracpower_max * max(timesteps_available - 1, 0)) # accounting for timesteps_availble equal to zero
 end
