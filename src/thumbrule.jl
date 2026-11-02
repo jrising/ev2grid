@@ -1,29 +1,25 @@
 using Dates
 
-function get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive_time_charge_level)
+function get_dsoc_thumbrule1(tt, state, drive_starts_time, park_starts_time, floor, ceiling, drive_time_charge_level)
     vehicles_plugged_1, soc_plugged_1, soc_driving_1 = state
     dt1 = dt0 + periodstep(tt)
 
-    timesteps_available = timesteps_to_drive(dt1, drive_starts_time)
-
-    # calculate if a price change occurs before we need to start driving
-    # take dt1 and drive_starts_time and test each hour in between for if it switches peak to non peak
-    # alternative here is to hard code that the pricing switches at 8 pm and 12 pm
-
-    price_switch = false  # Default: No switch found
-    current_peak_status = is_peak(dt1)
-
-    for t in 1:(timesteps_available-1) # Remove the time when driving starts, since we can't charge then
+    # rather than if there is a price change before driving, check if there is ever a price change over the day
+    # skipping the hours that you are driving
+    is_driving(tm) = drive_starts_time <= park_starts_time ?
+        drive_starts_time <= tm < park_starts_time :
+        tm >= drive_starts_time || tm < park_starts_time
+    t_switch = findfirst(1:23) do t
         dt_check = dt1 + periodstep(t)
-        if is_peak(dt_check) != current_peak_status  # Detects a switch
-            price_switch = true
-            break  # Exit loop when first switch is found
-        end
+        !is_driving(Time(dt_check)) && is_peak(dt_check) != is_peak(dt1)
     end
+
+    price_switch = t_switch !== nothing  # charge to ceiling if off-peak and any switch is coming
+    switch_before_drive = price_switch && t_switch < timesteps_to_drive(dt1, drive_starts_time)  # only discharge if we can buy back off-peak before driving
 
     soc_goal = drive_time_charge_level ## if nothing else set to 80%
 
-    if is_peak(dt1) && floor <= soc_plugged_1 && price_switch
+    if is_peak(dt1) && floor <= soc_plugged_1 && switch_before_drive
         # add headroom for soc_dispersion equal to 3 standard deviations 
         soc_goal = floor + 3 * soc_dispersion # Discharge if peak price, above floor, and price change coming
     elseif !is_peak(dt1) && price_switch ## if off peak and price change coming, charge to ceiling
@@ -74,21 +70,20 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
         current_time = Time(dt1)
         charging_kw = abs(get(dsoc_bytt, tt, 0.)) * vehicle_capacity * vehicles_plugged_1 / timestep
         regrange_left = min(regrange_value, max_charging_kw * vehicles_plugged_1 - charging_kw)
-        if timesteps_since_park(dt1, park_starts_time) < 1 ||
-            timesteps_to_drive(dt1, drive_starts_time) <= 1
+        if timesteps_to_drive(dt1, drive_starts_time) <= 1
             return 0.0 ## can't offer regrange at the start in case we are at the edge
         end
 
         if drive_starts_time <= park_starts_time
             # Don't park on the next day
-            if current_time >= drive_starts_time && current_time <= park_starts_time
+            if current_time >= drive_starts_time && current_time < park_starts_time
                 return 0.0  # During drive hours
             else
                 return regrange_left  # Outside drive hours
             end
         else
             # Midnight crossing case
-            if current_time >= drive_starts_time || current_time <= park_starts_time
+            if current_time >= drive_starts_time || current_time < park_starts_time
                 return 0.0  # During drive hours
             else
                 return regrange_left  # Outside drive hours
@@ -109,7 +104,7 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
     end, regrange_func
     else
         ## include arbitrage between ceiling and floor
-        (tt, state) -> (dsoc_bytt[tt] = get_dsoc_thumbrule1(tt, state, drive_starts_time, floor, ceiling, drive_time_charge_level)), regrange_func
+        (tt, state) -> (dsoc_bytt[tt] = get_dsoc_thumbrule1(tt, state, drive_starts_time, park_starts_time, floor, ceiling, drive_time_charge_level)), regrange_func
     end
     ## 4. Offer as regrange min(0.95 - SOC, SOC - 0.3).
 end

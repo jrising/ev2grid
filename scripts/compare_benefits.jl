@@ -16,7 +16,7 @@ vehicles_plugged_1 = vehicles_plugged_scheduled(dt0 + periodstep(1), drive_start
 df1 = fullsimulate(dt0, strat, zeros(SS-1), vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
 df1[!, :Approach] .= "Optimized"
 
-df2 = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, soc_min, soc_max, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
+df2 = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, park_starts_time, soc_min, soc_max, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
 df2[!, :Approach] .= "Rule of Thumb"
 
 df3 = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule_baseline(tt, state, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
@@ -37,7 +37,7 @@ for drive_starts_hour in 1:23
     df1[!, :Approach] .= "Optimized"
     df1[!, :start_hour] .= drive_starts_hour
 
-    df2 = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, soc_min, soc_max, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
+    df2 = fullsimulate(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, park_starts_time, soc_min, soc_max, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time)
     df2[!, :Approach] .= "Rule of Thumb"
     df2[!, :start_hour] .= drive_starts_hour
 
@@ -50,7 +50,7 @@ for drive_starts_hour in 1:23
     push!(alldf, df3)
 end
 
-CSV.write("../results/bytime-xstart.csv", vcat(alldf...))
+CSV.write("results/bytime-xstart.csv", vcat(alldf...))
 
 
 ## TODO: Continue from here
@@ -67,7 +67,7 @@ benefits_list_optimized = []
         push!(benefits_list_optimized, benefits_stoch)
         # pass events from event_log into rule of thumb simulation
         events = event_log
-        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, soc_min, soc_max, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time; events=events)
+        df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule1(tt, state, drive_starts_time, park_starts_time, soc_min, soc_max, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time; events=events)
         benefits_rot = sum(df[!, "valuep"])
         push!(benefits_list_rot, benefits_rot)
         df = fullsimulate_with_events(dt0, (tt, state) -> get_dsoc_thumbrule_baseline(tt, state, drive_time_charge_level), (tt) -> 0., vehicles_plugged_1, 0.5, 0.5, drive_starts_time, park_starts_time; events=events)
