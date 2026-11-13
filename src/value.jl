@@ -12,7 +12,7 @@ pricedf[!, :datetime] = DateTime.(replace.(pricedf.datetime, " " => "T"))
 pricedf.predpe = pricedf.predpe / 1000 # $/MWh -> $/kWh
 
 let _avg = CSV.read(joinpath(@__DIR__, "../data/avg_regprice_byhour.csv"), DataFrame)
-    global avg_regprice_byhour = Dict(zip(_avg.hour, _avg.avg_predpe ./ 1000)) # $/MWh -> $/kWh
+    global avg_regprice_byhour = Dict(zip(_avg.hour, _avg.avg_rmccp ./ 1000)) # $/MWh -> $/kWh
 end
 
 """
