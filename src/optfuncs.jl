@@ -187,7 +187,8 @@ function optimize_regrange_probstate(dt0::DateTime, probstate::Array{Float64, 4}
 
                 if regrange > 0
                     ## Calculate probability of falling outside of allowed range
-                    probfailthismc = combinebyact(probfail .+ regrange_fail_bystate, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3) .+ (1 .- regrange_good_byact);
+                    ## Use 1 - (1 - A) (1 - B), the probability of either current or future failure
+                    probfailthismc = 1 .- (1 .- combinebyact(1 .- (1 .- probfail) .* (1 .- regrange_fail_bystate), state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3)) .* regrange_good_byact;
                 else
                     # no additional probfail
                     probfailthismc = combinebyact(probfail, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
@@ -205,13 +206,8 @@ function optimize_regrange_probstate(dt0::DateTime, probstate::Array{Float64, 4}
 
             thisVV2 = VV1byact[bestact];
             thisprobfail = probfailbyact[bestact]
-            ## probfail is the sum over periods until the end of the horizon
-            ## we want to offer regulation services based on the probability of failing in the 
-            ## current period. probfail > 1 for some start hours.
-            failnow_byact = regrange > 0 ? min.(1., regrange_fail_byact .+ (1 .- regrange_good_byact)) : zeros(size(regrange_fail_byact))
-            thisfailnow = failnow_byact[bestact]
+            thisvalue = sum(probstate[tt, :, :, :] .* (thisVV2 .+ regprice * (regrange / regneutral) * (1 .- thisprobfail)))
 
-            thisvalue = sum(probstate[tt, :, :, :] .* (thisVV2 .+ regprice * (regrange * timestep) * (1 .- thisfailnow)))
             if thisvalue > bestvalue
                 bestvalue = thisvalue
                 beststrat = Base.Fix2(getindex, 1).(bestact);
@@ -375,7 +371,8 @@ function optimize_regrange_given(dt0::DateTime, regrange::Vector{Float64},  driv
 
             if regrange[tt] > 1 # can have very small values that result in failures
                 ## Calculate probability of falling outside of allowed range
-                probfailthismc = combinebyact(probfail .+ regrange_fail_bystate, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3) .+ (1 .- regrange_good_byact);
+                ## Use 1 - (1 - A) (1 - B), the probability of either current or future failure
+                probfailthismc = 1 .- (1 .- combinebyact(1 .- (1 .- probfail) .* (1 .- regrange_fail_bystate), state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3)) .* regrange_good_byact;
             else
                 # no additional probfail
                 probfailthismc = combinebyact(probfail, state2base, state2ceil1, probbase1, state2ceil2, probbase2, state2ceil3, probbase3);
@@ -385,10 +382,7 @@ function optimize_regrange_given(dt0::DateTime, regrange::Vector{Float64},  driv
         end
 
         probfailbyact = probfailsummc / mcdraws;
-        # same fix here, want the probability of failing in this period 
-        failnow_byact = regrange[tt] > 1 ? min.(1., regrange_fail_byact .+ (1 .- regrange_good_byact)) : zeros(size(regrange_fail_byact));
-
-        VV1byact = VV1byactsummc / mcdraws + valuep + valuepns_byaction + valuee_byaction + regprice * regrange[tt] * (1 .- failnow_byact);
+        VV1byact = VV1byactsummc / mcdraws + valuep + valuepns_byaction + valuee_byaction + regprice * regrange[tt] * (1 .- probfailbyact);
         VV1byact[isnan.(VV1byact)] .= -Inf;
 
         bestact = dropdims(argmax(VV1byact - probfail_penalty * sqrt.(probfailbyact), dims=1), dims=1);
@@ -401,14 +395,16 @@ function optimize_regrange_given(dt0::DateTime, regrange::Vector{Float64},  driv
     return strat, probfail
 end
 
-function given_calcvalue(df, regrange, dt0)
-    df[!, :kw] = (df.dsoc .* vehicle_capacity .* df.vehicles_plugged .* (1 .- df.portion_below) / timestep) .+
-        (max_charging_kw * df.portion_below .* df.vehicles_plugged)
-        # avoid counting regrange as load, it is energy neutral over 30 minutes
+function given_calcvalue(df, regrange, dt0, include_demandcost=false)
+    if include_demandcost
+        df[!, :kw] = (df.dsoc .* vehicle_capacity .* df.vehicles_plugged .* (1 .- df.portion_below) / timestep) .+
+            (max_charging_kw * df.portion_below .* df.vehicles_plugged) .+ regrange
 
-    sum(df.valuep .+ df.valuepns .+ df.valuee .+ df.valuer) #-
-        # get_demand_cost(dt0, collect(skipmissing(df.kw)), timestep)
-        # drop demand cost since we do not plot it, isn't in fullsim 
+        sum(df.valuep .+ df.valuepns .+ df.valuee .+ df.valuer) -
+            get_demand_cost(dt0, collect(skipmissing(df.kw)), timestep)
+    else
+        sum(df.valuep .+ df.valuepns .+ df.valuee .+ df.valuer)
+    end
 end
 
 function given_calcmaxrange!(df)
@@ -524,7 +520,7 @@ function optimize_regrange_double_outer_loop(dt0, soc_plugged_1, soc_driving_1, 
                     rand(Truncated(Normal(min(dfbest.regrange_maxkw[index], regrangebest[index]), max_charging_kw * exp(-ll / 100)), # scale the stdev of perturbation
                                    0., dfbest.regrange_maxkw[index]))
             else
-                regrange = rand.(Truncated.(Normal.(min.(dfbest.regrange_maxkw, regrangebest), max_charging_kw * exp(-ll / 100)), # same scaling 
+                regrange = rand.(Truncated.(Normal.(min.(dfbest.regrange_maxkw, regrangebest), max_charging_kw * exp(-ll / 100)), # same scaling
                                             min.(dfbest.regrange_maxkw, regrangebest), dfbest.regrange_maxkw))
             end
         end
