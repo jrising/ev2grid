@@ -70,8 +70,9 @@ function thumbrule_regrange(dt0, drive_starts_time, park_starts_time, drive_time
         current_time = Time(dt1)
         charging_kw = abs(get(dsoc_bytt, tt, 0.)) * vehicle_capacity * vehicles_plugged_1 / timestep
         regrange_left = min(regrange_value, max_charging_kw * vehicles_plugged_1 - charging_kw)
-        if timesteps_to_drive(dt1, drive_starts_time) <= 1
-            return 0.0 ## can't offer regrange at the start in case we are at the edge
+        if timesteps_since_park(dt1, park_starts_time) < 1 ||
+            timesteps_to_drive(dt1, drive_starts_time) <= 1
+            return 0.0 ## can't offer regrange at the start or end in case we are at the edge
         end
 
         if drive_starts_time <= park_starts_time
