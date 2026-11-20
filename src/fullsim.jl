@@ -35,7 +35,7 @@ function fullsimulate(dt0::DateTime, get_dsoc::Function, get_regrange::Function,
         valuee = value_energy(vehicle_split[1], vehicle_split[3], soc_needed, vehicles_plugged_1)
 
         regprice = avg_regprice_byhour[hour(dt1)]
-        valuer = regprice * get_regrange(tt) / regneutral
+        valuer = regprice * get_regrange(tt) * timestep
 
         push!(rows, (dt0 + periodstep(tt), soc_needed, vehicles_plugged_1, vehicle_split[1], vehicle_split[2], vehicle_split[3], soc_plugged_1, soc_driving_1, dsoc, statebase, valuep, valuepns, valuee, valuer))
 
